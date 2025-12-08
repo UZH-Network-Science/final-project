@@ -60,6 +60,9 @@ The Swiss dataset supports two data sources (configurable via `DATA_SOURCE` in t
 
 #### Option 1: SBB Infrastructure Data (`DATA_SOURCE = "sbb"`)
 
+> **⚠️ NOTE: Incomplete Dataset**
+> This dataset primarily covers SBB-owned infrastructure and excludes major private operators (e.g., BLS, RhB, MGB). It was utilized in the initial phases of the project but found insufficient for the final robustness analysis due to topological gaps. **It is NOT used for the final evaluation.** The codebase supports it for legacy reasons and comparison.
+
 | File | Description |
 |------|-------------|
 | `sbb-linie-mit-betriebspunkten.csv` | Line topology with operational points |
