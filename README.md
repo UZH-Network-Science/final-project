@@ -138,9 +138,21 @@ Both notebooks include interactive Folium maps for exploring the networks. The S
 | `operator` | ✓ | — | Operating company |
 | `source` | — | ✓ | Data source (`'sbb'` or `'swisstopo'`) |
 
+## Setup
+
+For a one-step installation of dependencies and git filters:
+
+```bash
+make setup
+```
+
+This will:
+1.  Install Python dependencies from `requirements.txt`.
+2.  Configure `nbstripout` to keep the repository clean.
+
 ## Git LFS
 
-Large files (datasets, notebooks with outputs) are tracked with Git LFS. After cloning:
+Large files (datasets) are tracked with Git LFS. After cloning:
 
 ```bash
 git lfs pull
