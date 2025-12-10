@@ -124,13 +124,22 @@ class NetworkAnalyzer:
         
         if strategy == 'degree':
             centrality = nx.degree_centrality(self.G_lcc)
+            reverse = True
+        elif strategy == 'inverse_degree':
+            centrality = nx.degree_centrality(self.G_lcc)
+            reverse = False
         elif strategy == 'betweenness':
              print("Calculating Betweenness (this may take a while)...")
              centrality = nx.betweenness_centrality(self.G_lcc)
+             reverse = True
+        elif strategy == 'inverse_betweenness':
+             print("Calculating Betweenness (this may take a while)...")
+             centrality = nx.betweenness_centrality(self.G_lcc)
+             reverse = False
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
             
-        sorted_nodes = sorted(centrality, key=centrality.get, reverse=True)
+        sorted_nodes = sorted(centrality, key=centrality.get, reverse=reverse)
         
         results = {}
         for f in fractions:

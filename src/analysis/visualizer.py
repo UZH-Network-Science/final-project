@@ -132,6 +132,12 @@ class NetworkVisualizer:
                 remove_nodes = sorted_degree[:num_remove]
             elif strategy == "Targeted (Betweenness)":
                 remove_nodes = sorted_betweenness[:num_remove]
+            elif strategy == "Targeted (Inverse Degree)":
+                # Inverse means lowest degree first. sorted_degree is high->low.
+                # So we take from the end.
+                remove_nodes = sorted_degree[-num_remove:] if num_remove > 0 else []
+            elif strategy == "Targeted (Inverse Betweenness)":
+                remove_nodes = sorted_betweenness[-num_remove:] if num_remove > 0 else []
             
             G_temp.remove_nodes_from(remove_nodes)
             
@@ -166,7 +172,7 @@ class NetworkVisualizer:
             # Let's skip nodes for performance on large graphs, or simplified
             
         # 5. Controls
-        strat_dd = Dropdown(options=['Random', 'Targeted (Degree)', 'Targeted (Betweenness)'], value='Random', description='Strategy:')
+        strat_dd = Dropdown(options=['Random', 'Targeted (Degree)', 'Targeted (Betweenness)', 'Targeted (Inverse Degree)', 'Targeted (Inverse Betweenness)'], value='Random', description='Strategy:')
         frac_sl = FloatSlider(min=0.0, max=0.5, step=0.05, value=0.0, description='Fraction:')
         
         def on_change(change):
