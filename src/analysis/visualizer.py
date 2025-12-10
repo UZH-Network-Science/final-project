@@ -245,8 +245,8 @@ class NetworkVisualizer:
         # 2. Styles
         style_core = {'color': 'blue', 'weight': 1, 'opacity': 0.6}
         style_iso = {'color': 'red', 'weight': 1, 'opacity': 0.6}
-        style_node_core = {'radius': 3, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8}
-        style_node_iso = {'radius': 3, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8}
+        style_node_core = {'radius': 6, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8}
+        style_node_iso = {'radius': 6, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8}
 
         # 3. Calculate Components (Initial State)
         if len(G) > 0:

@@ -1,6 +1,7 @@
-
 import folium
+import random
 import networkx as nx
+import math
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
@@ -175,13 +176,23 @@ def create_component_map(G):
     components = sorted(nx.connected_components(G), key=len, reverse=True)
     colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe'] # Distinct colors
     
-    # Create layers for ALL components
+    # Create layers
+    # Strategy: Top 50 components get their own layer.
+    # All others (potentially thousands) are grouped into one "Small Components" layer to prevent Folium/Browser crash.
     layers = {}
+    limit_individual_layers = 50
+    
+    small_comps_layer = folium.FeatureGroup(name=f"Small Multitudes ({max(0, len(components)-limit_individual_layers)} comps)", show=True)
+    
     for idx, comp in enumerate(components):
-        layer_name = f"Component {idx+1} ({len(comp)} nodes)"
-        # Show top 10 by default, others hidden to prevent total clutter but available in menu
-        show_layer = True if idx < 10 else False 
-        layers[idx] = folium.FeatureGroup(name=layer_name, show=show_layer)
+        if idx < limit_individual_layers:
+            layer_name = f"Component {idx+1} ({len(comp)} nodes)"
+            # Show ALL layers by default as requested
+            show_layer = True 
+            layers[idx] = folium.FeatureGroup(name=layer_name, show=show_layer)
+        else:
+            # Map index to the shared layer
+            layers[idx] = small_comps_layer
             
     node_to_comp_idx = {}
     for idx, comp in enumerate(components):
@@ -193,6 +204,10 @@ def create_component_map(G):
         u_data = G.nodes[u]
         v_data = G.nodes[v]
         if 'lat' in u_data and 'lat' in v_data:
+            # Check for NaN
+            if math.isnan(u_data['lat']) or math.isnan(u_data['lon']) or math.isnan(v_data['lat']) or math.isnan(v_data['lon']):
+                continue
+                
             comp_idx = node_to_comp_idx.get(u, 0)
             color = colors[comp_idx % len(colors)]
             target_layer = layers.get(comp_idx)
@@ -213,6 +228,9 @@ def create_component_map(G):
             for node in comp:
                 data = G.nodes[node]
                 if 'lat' not in data: continue
+                # Check for NaN
+                if math.isnan(data['lat']) or math.isnan(data['lon']):
+                    continue
                 
                 folium.CircleMarker(
                     location=[data['lat'], data['lon']],
@@ -221,8 +239,13 @@ def create_component_map(G):
                     tooltip=f"Comp {idx+1}"
                 ).add_to(target_layer)
             
-    for idx in sorted(layers.keys()):
+    # Add individual layers sorted
+    for idx in sorted([k for k in layers.keys() if isinstance(k, int) and k < limit_individual_layers]):
         layers[idx].add_to(m)
+    
+    # Add the catch-all layer if used
+    if len(components) > limit_individual_layers:
+        small_comps_layer.add_to(m)
         
     folium.LayerControl().add_to(m)
     return m
