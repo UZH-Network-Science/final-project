@@ -215,6 +215,94 @@ class NetworkVisualizer:
         plt.title(title)
         plt.xlabel("Fraction of Nodes Removed")
         plt.ylabel(ylabel)
-        plt.legend()
         plt.grid(True, linestyle='--', alpha=0.3)
         plt.show()
+
+    def create_component_map(self, G):
+        """
+        Creates a map showing the Largest Connected Component (Blue) and Isolated Components (Red).
+        No interactive attack simulation controls.
+        """
+        # Pre-process coordinates
+        geojson_pos = {}
+        lats, lons = [], []
+        for n, d in G.nodes(data=True):
+            if 'lat' in d and 'lon' in d:
+                geojson_pos[n] = (d['lon'], d['lat'])
+                lats.append(d['lat'])
+                lons.append(d['lon'])
+        
+        if not lats:
+            return None
+
+        center_lat = sum(lats) / len(lats)
+        center_lon = sum(lons) / len(lons)
+
+        # 1. Initialize Map
+        m = Map(center=(center_lat, center_lon), zoom=8, basemap=basemaps.CartoDB.Positron, scroll_wheel_zoom=True)
+        m.layout.height = '600px'
+
+        # 2. Styles
+        style_core = {'color': 'blue', 'weight': 1, 'opacity': 0.6}
+        style_iso = {'color': 'red', 'weight': 1, 'opacity': 0.6}
+        style_node_core = {'radius': 3, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8}
+        style_node_iso = {'radius': 3, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8}
+
+        # 3. Calculate Components (Initial State)
+        if len(G) > 0:
+            largest_cc = max(nx.connected_components(G), key=len)
+            lcc_set = set(largest_cc)
+        else:
+            lcc_set = set()
+
+        # 4. Construct Features
+        core_edges = []
+        iso_edges = []
+        core_nodes = []
+        iso_nodes = []
+
+        # Edges
+        for u, v in G.edges():
+            if u in geojson_pos and v in geojson_pos:
+                coords = [geojson_pos[u], geojson_pos[v]]
+                feat = {'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': [coords]}, 'properties': {}}
+                if u in lcc_set and v in lcc_set:
+                    core_edges.append(feat)
+                else:
+                    iso_edges.append(feat)
+        
+        # Nodes
+        # For the construction story, visualization of nodes is important context
+        for n in G.nodes():
+            if n in geojson_pos:
+                feat = {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': geojson_pos[n]}, 'properties': {}}
+                if n in lcc_set:
+                    core_nodes.append(feat)
+                else:
+                    iso_nodes.append(feat)
+
+        # 5. Layers
+        layer_edges_core = GeoJSON(data={'type': 'FeatureCollection', 'features': core_edges}, style=style_core, name='Edges (Core)')
+        layer_edges_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': iso_edges}, style=style_iso, name='Edges (Isolated)')
+        
+        # Note: Point styling in GeoJSON layer is done via point_style
+        layer_nodes_core = GeoJSON(data={'type': 'FeatureCollection', 'features': core_nodes}, point_style=style_node_core, name='Nodes (Core)')
+        layer_nodes_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': iso_nodes}, point_style=style_node_iso, name='Nodes (Isolated)')
+
+        m.add_layer(layer_edges_core)
+        m.add_layer(layer_edges_iso)
+        m.add_layer(layer_nodes_core)
+        m.add_layer(layer_nodes_iso)
+
+        # 6. Legend
+        html_legend = HTML('''
+            <div style="background:white; padding:5px; border:1px solid #ccc; border-radius:5px;">
+                <b>Components</b><br>
+                <i style="background:blue; width:10px; height:10px; display:inline-block; border-radius:50%;"></i> Largest<br>
+                <i style="background:red; width:10px; height:10px; display:inline-block; border-radius:50%;"></i> Isolated
+            </div>
+        ''')
+        m.add_control(WidgetControl(widget=html_legend, position='topright'))
+        
+        return m
+
