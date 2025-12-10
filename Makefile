@@ -12,3 +12,8 @@ install:
 setup: install
 
 
+process:
+	@echo "Running data processing pipelines..."
+	python3 -m src.processing.run
+	@echo "Data processing complete."
+

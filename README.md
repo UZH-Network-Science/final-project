@@ -83,18 +83,19 @@ Nodes are identified by station abbreviations and connected based on line topolo
 
 ### Building the Graphs
 
-1. **Japan:**
-   ```bash
-   # Run all cells in Japan_dataset_exploration.ipynb
-   # Output: datasets/japan/japan_rail_network.gpickle
-   ```
+You can regenerate the graph files (`.gpickle`) from the raw data using the automated command:
 
-2. **Switzerland:**
-   ```bash
-   # Set DATA_SOURCE in Swiss_dataset_exploration.ipynb
-   # Run all cells
-   # Output: datasets/switzerland/sbb_rail_network.gpickle (or swisstopo variant)
-   ```
+```bash
+make process
+```
+
+This will run the processing pipelines for both Switzerland and Japan.
+
+Alternatively, you can run them individually:
+```bash
+python3 -m src.processing.run switzerland
+python3 -m src.processing.run japan
+```
 
 ### Loading Pre-built Graphs
 
