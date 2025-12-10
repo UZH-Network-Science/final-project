@@ -53,6 +53,7 @@ class NetworkVisualizer:
     def create_interactive_map_ui(self, G):
         """
         Creates an interactive ipyleaflet map with sliders for robustness analysis.
+        Includes Visual Layer Control (Checkboxes) and Finite-Step Slider.
         """
         # Pre-process coordinates for speed
         geojson_pos = {}
@@ -75,49 +76,90 @@ class NetworkVisualizer:
         print("Calculating centralities for interactive map...")
         # Note: For large graphs like Japan (20k), Betweenness is slow. 
         # We handle this by checking graph size or caching if possible.
-        # For uniformity, we run it but warn.
         degree_cent = nx.degree_centrality(G)
+        articulation_points = set(nx.articulation_points(G))
         
         if len(G) > 5000:
             print("Graph is large (>5k nodes). Skipping calculate-on-the-fly Betweenness for interactivity speed.")
-            # Fallback to degree for betweenness placeholder or just empty
             betweenness_cent = degree_cent 
+            # Performance Guard:
+            skip_nodes = True
         else:
             betweenness_cent = nx.betweenness_centrality(G)
+            skip_nodes = False
 
         sorted_degree = sorted(degree_cent, key=degree_cent.get, reverse=True)
         sorted_betweenness = sorted(betweenness_cent, key=betweenness_cent.get, reverse=True)
+        
+        # Pre-sort for Articulation Strategy
+        ap_list = sorted([n for n in articulation_points], key=degree_cent.get, reverse=True)
+        others = sorted([n for n in degree_cent if n not in articulation_points], key=degree_cent.get, reverse=True)
+        sorted_articulation = ap_list + others
+        
         all_nodes = list(G.nodes())
 
         # 1. Initialize Map
         m = Map(center=(center_lat, center_lon), zoom=8, basemap=basemaps.CartoDB.Positron, scroll_wheel_zoom=True)
-        m.layout.height = '600px'
+        m.layout.height = '700px'
 
         # 2. Layers
-        style_core = {'color': 'blue', 'weight': 1, 'opacity': 0.6}
-        style_iso = {'color': 'red', 'weight': 1, 'opacity': 0.6}
-        style_node_core = {'radius': 3, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8}
-        style_node_iso = {'radius': 3, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8}
+        style_blue_edge = {'color': 'blue', 'weight': 1, 'opacity': 0.6}
+        style_red_edge = {'color': 'red', 'weight': 1, 'opacity': 0.6}
+        style_blue_node = {'radius': 3, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8, 'weight': 1}
+        style_red_node = {'radius': 3, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8, 'weight': 1}
 
-        layer_edges_core = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_core, name='Edges (Core)')
-        layer_edges_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_iso, name='Edges (Isolated)')
-        layer_nodes_core = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_node_core, name='Nodes (Core)')
-        layer_nodes_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_node_iso, name='Nodes (Isolated)')
+        layer_edges_blue = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_blue_edge, name='Edges (Core)')
+        layer_edges_red = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_red_edge, name='Edges (Isolated)')
+        
+        layer_nodes_blue = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_blue_node, name='Nodes (Core)')
+        layer_nodes_red = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_red_node, name='Nodes (Isolated)')
 
-        m.add_layer(layer_edges_core)
-        m.add_layer(layer_edges_iso)
-        m.add_layer(layer_nodes_core)
-        m.add_layer(layer_nodes_iso)
+        m.add_layer(layer_edges_blue)
+        m.add_layer(layer_edges_red)
+        m.add_layer(layer_nodes_blue)
+        m.add_layer(layer_nodes_red)
 
-        # 3. Legend Widget (simplified)
-        html_legend = HTML('''
-            <div style="background:white; padding:5px; border:1px solid #ccc; border-radius:5px;">
-                <b>Legend</b><br>
-                <i style="background:blue; width:10px; height:10px; display:inline-block; border-radius:50%;"></i> Core<br>
-                <i style="background:red; width:10px; height:10px; display:inline-block; border-radius:50%;"></i> Isolated
-            </div>
-        ''')
-        m.add_control(WidgetControl(widget=html_legend, position='topright'))
+        # 3. Consolidated Legend & Layer Control
+        def legend_icon(color, shape='line'):
+            if shape == 'line':
+                return f'<i style="background: {color}; width: 25px; height: 3px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>'
+            else:
+                return f'<i style="background: {color}; width: 10px; height: 10px; display: inline-block; border-radius: 50%; vertical-align: middle; margin-right: 5px;"></i>'
+
+        label_edges_blue = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges (Connected)</b>")
+        label_edges_red = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
+        label_nodes_blue = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes (Connected)</b>")
+        label_nodes_red = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
+        
+        check_edges_blue = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        check_edges_red = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        check_nodes_blue = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        check_nodes_red = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        
+        jslink((check_edges_blue, 'value'), (layer_edges_blue, 'visible'))
+        jslink((check_edges_red, 'value'), (layer_edges_red, 'visible'))
+        jslink((check_nodes_blue, 'value'), (layer_nodes_blue, 'visible'))
+        jslink((check_nodes_red, 'value'), (layer_nodes_red, 'visible'))
+        
+        row_1 = HBox([check_edges_blue, label_edges_blue], layout=Layout(align_items='center'))
+        row_2 = HBox([check_edges_red, label_edges_red], layout=Layout(align_items='center'))
+        row_3 = HBox([check_nodes_blue, label_nodes_blue], layout=Layout(align_items='center'))
+        row_4 = HBox([check_nodes_red, label_nodes_red], layout=Layout(align_items='center'))
+        
+        layer_control_box = VBox([
+            HTML(value="<b>Network Layers & Legend</b>"),
+            row_1, row_2, row_3, row_4
+        ])
+        
+        if len(G) > 5000:
+            layer_control_box.children += (HTML(value="<br><i><small>Performance Guard: Node layers disabled (>5k nodes)</small></i>"),)
+
+        layer_control_box.layout.padding = '5px'
+        layer_control_box.layout.background_color = 'white'
+        layer_control_box.layout.border = '2px solid #ccc'
+        layer_control_box.layout.border_radius = '5px'
+
+        m.add_control(WidgetControl(widget=layer_control_box, position='topright'))
 
         # 4. Update Logic
         def update_layers(strategy, fraction):
@@ -133,11 +175,11 @@ class NetworkVisualizer:
             elif strategy == "Targeted (Betweenness)":
                 remove_nodes = sorted_betweenness[:num_remove]
             elif strategy == "Targeted (Inverse Degree)":
-                # Inverse means lowest degree first. sorted_degree is high->low.
-                # So we take from the end.
                 remove_nodes = sorted_degree[-num_remove:] if num_remove > 0 else []
             elif strategy == "Targeted (Inverse Betweenness)":
                 remove_nodes = sorted_betweenness[-num_remove:] if num_remove > 0 else []
+            elif strategy == "Targeted (Articulation)":
+                remove_nodes = sorted_articulation[:num_remove]
             
             G_temp.remove_nodes_from(remove_nodes)
             
@@ -148,33 +190,58 @@ class NetworkVisualizer:
                 lcc_set = set()
 
             # GeoJSON construction
-            # Optimization: Only plot a subset if graph is huge? 
-            # For now, plot all but be aware of browser limit.
-            
-            core_features = []
-            iso_features = []
+            blue_lines = []
+            red_lines = []
             
             # Edges
-            for u, v in G.edges(): # Use original edges, check if nodes exist in G_temp
-                if u in G_temp and v in G_temp: # Both nodes survived
+            for u, v in G.edges(): 
+                if u in G_temp and v in G_temp: 
                     if u in geojson_pos and v in geojson_pos:
                         coords = [geojson_pos[u], geojson_pos[v]]
-                        feat = {'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': [coords]}, 'properties': {}}
-                        if u in lcc_set:
-                            core_features.append(feat)
+                        if u in lcc_set and v in lcc_set: # Strict definition: Edge is core if BOTH nodes are in LCC? Or if u in lcc (since comp connect)
+                             # If edge exists in G_temp, u and v are connected. If u is in lcc, v must be in lcc.
+                             # So check u in lcc_set is enough
+                            blue_lines.append(coords)
                         else:
-                            iso_features.append(feat)
+                            red_lines.append(coords)
             
-            layer_edges_core.data = {'type': 'FeatureCollection', 'features': core_features}
-            layer_edges_iso.data = {'type': 'FeatureCollection', 'features': iso_features}
+            layer_edges_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': blue_lines}, 'properties': {}}]} if blue_lines else {'type': 'FeatureCollection', 'features': []}
+            layer_edges_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': red_lines}, 'properties': {}}]} if red_lines else {'type': 'FeatureCollection', 'features': []}
             
-            # Nodes (Optional: Plotting all nodes can be heavy)
-            # Let's skip nodes for performance on large graphs, or simplified
+            # Nodes
+            blue_pts = []
+            red_pts = []
             
+            if not skip_nodes:
+                for n in G_temp.nodes():
+                    if n in geojson_pos:
+                        pt = geojson_pos[n]
+                        if n in lcc_set:
+                            blue_pts.append(pt)
+                        else:
+                            red_pts.append(pt)
+                        
+            layer_nodes_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': blue_pts}, 'properties': {}}]} if blue_pts else {'type': 'FeatureCollection', 'features': []}
+            layer_nodes_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': red_pts}, 'properties': {}}]} if red_pts else {'type': 'FeatureCollection', 'features': []}
+
         # 5. Controls
-        strat_dd = Dropdown(options=['Random', 'Targeted (Degree)', 'Targeted (Betweenness)', 'Targeted (Inverse Degree)', 'Targeted (Inverse Betweenness)'], value='Random', description='Strategy:')
-        frac_sl = FloatSlider(min=0.0, max=0.5, step=0.05, value=0.0, description='Fraction:')
+        strat_dd = Dropdown(options=['Random', 'Targeted (Degree)', 'Targeted (Betweenness)', 'Targeted (Articulation)', 'Targeted (Inverse Degree)', 'Targeted (Inverse Betweenness)'], value='Random', description='Strategy:')
+        frac_sl = FloatSlider(min=0.0, max=0.5, step=0.01, value=0.0, description='Fraction:', layout=Layout(flex='3'))
         
+        btn_minus = Button(description='-', layout=Layout(width='40px'))
+        btn_plus = Button(description='+', layout=Layout(width='40px'))
+        
+        def on_minus(b):
+            new_val = round(max(frac_sl.min, frac_sl.value - 0.01), 2)
+            frac_sl.value = new_val
+            
+        def on_plus(b):
+            new_val = round(min(frac_sl.max, frac_sl.value + 0.01), 2)
+            frac_sl.value = new_val
+            
+        btn_minus.on_click(on_minus)
+        btn_plus.on_click(on_plus)
+
         def on_change(change):
             update_layers(strat_dd.value, frac_sl.value)
             
@@ -184,7 +251,8 @@ class NetworkVisualizer:
         # Initial draw
         update_layers('Random', 0.0)
         
-        display(VBox([strat_dd, frac_sl]))
+        slider_row = HBox([frac_sl, btn_minus, btn_plus])
+        display(VBox([strat_dd, slider_row]))
         display(m)
 
     def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):

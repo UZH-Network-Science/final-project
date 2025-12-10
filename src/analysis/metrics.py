@@ -136,10 +136,27 @@ class NetworkAnalyzer:
              print("Calculating Betweenness (this may take a while)...")
              centrality = nx.betweenness_centrality(self.G_lcc)
              reverse = False
+        elif strategy == 'articulation':
+             # Hybrid Strategy: Articulation Points first (sorted by degree), then High Degree
+             print("identifying Articulation Points...")
+             articulation_points = set(nx.articulation_points(self.G_lcc))
+             degree_cent = nx.degree_centrality(self.G_lcc)
+             
+             # Sort Articulation Points by Degree
+             ap_list = sorted([n for n in articulation_points], key=degree_cent.get, reverse=True)
+             
+             # Sort Non-Articulation Points by Degree
+             others = sorted([n for n in degree_cent if n not in articulation_points], key=degree_cent.get, reverse=True)
+             
+             # Combined list
+             sorted_nodes = ap_list + others
+             centrality = None # Not needed for sorting anymore
+             reverse = None    # Already sorted
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
             
-        sorted_nodes = sorted(centrality, key=centrality.get, reverse=reverse)
+        if strategy != 'articulation':
+            sorted_nodes = sorted(centrality, key=centrality.get, reverse=reverse)
         
         results = {}
         for f in fractions:
