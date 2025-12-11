@@ -1,0 +1,20 @@
+
+# Analysis Configuration
+
+paths:
+  switzerland:
+    unified: "datasets/switzerland/swiss_rail_network_unified.gpickle"
+    raw: "datasets/switzerland/swiss_rail_network_swisstopo.gpickle"
+  japan:
+    unified: "datasets/japan/japan_rail_network.gpickle"
+
+simulations:
+  num_random_simulations: 50
+  fractions: [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+colors:
+  random: "green"
+  degree: "red"
+  betweenness: "orange"
+  node: "#1f77b4"
+  edge: "#6c757d"
