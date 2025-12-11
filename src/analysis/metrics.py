@@ -28,10 +28,8 @@ class NetworkAnalyzer:
             "num_edges": self.G.number_of_edges(),
             "lcc_nodes": self.n_lcc,
             "lcc_edges": self.G_lcc.number_of_edges(),
-             # Topo
             "average_path_length_topo": nx.average_shortest_path_length(self.G_lcc),
             "average_clustering_coefficient": nx.average_clustering(self.G_lcc),
-            # Eff
             "global_efficiency": nx.global_efficiency(self.G_lcc),
             "local_efficiency": nx.local_efficiency(self.G_lcc),
         }

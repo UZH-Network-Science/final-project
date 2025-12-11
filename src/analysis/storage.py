@@ -25,11 +25,12 @@ class ResultsManager:
             json.dump(results, f, indent=4)
         print(f"Saved metrics to {path}")
 
-    def get_cached_or_run(self, country_name, key, run_func, current_params=None):
+    def get_cached_or_run(self, country_name, key, run_func, current_params=None, override=False):
         """
         Smart caching logic:
         - If key not in results -> Run
         - If 'num_simulations' in current_params and cached version has fewer runs -> Run (and overwrite)
+        - If override is True -> Run (and overwrite)
         - Else -> Return cached
         """
         results = self.load_results(country_name)
@@ -37,7 +38,10 @@ class ResultsManager:
 
         should_run = False
         
-        if cached_data is None:
+        if override:
+            should_run = True
+            print(f"[{key}] Override enabled. Re-running...")
+        elif cached_data is None:
             should_run = True
             print(f"[{key}] No cached data found. Running...")
         else:
