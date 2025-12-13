@@ -1,44 +1,61 @@
 import networkx as nx
 import numpy as np
 import time
+import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from functools import partial
 
-def _worker_random_attack_lcc(G, num_to_remove, num_simulations, n_lcc):
-    sizes = []
+
+# Global variable to hold the shared graph in each worker process
+SHARED_GRAPH = None
+
+def _init_worker(G):
+    global SHARED_GRAPH
+    SHARED_GRAPH = G
+
+def _worker_random_attack_batch(num_to_remove, num_simulations, n_lcc, metrics):
+    """
+    Unified worker that can compute multiple metrics on the same perturbed graphs.
+    """
+    global SHARED_GRAPH
+    G = SHARED_GRAPH
+    
+    results = {m: [] for m in metrics}
     nodes = list(G.nodes())
+    
     if num_to_remove >= len(nodes):
-        return 0.0
-        
+        for m in metrics:
+            results[m] = [0.0] * num_simulations
+        return results
+
     for _ in range(num_simulations):
         G_temp = G.copy()
-        # np.random.choice on list of nodes
         remove_targets = np.random.choice(nodes, num_to_remove, replace=False)
         G_temp.remove_nodes_from(remove_targets)
         
-        if G_temp.number_of_nodes() > 0:
-            lcc_size = len(max(nx.connected_components(G_temp), key=len))
-            sizes.append(lcc_size / n_lcc)
-        else:
-            sizes.append(0.0)
-    return np.mean(sizes)
-
-def _worker_random_attack_efficiency(G, num_to_remove, num_simulations):
-    effs = []
-    nodes = list(G.nodes())
-    if num_to_remove >= len(nodes):
-        return 0.0
+        # Check if graph is empty once
+        is_empty = G_temp.number_of_nodes() == 0
         
-    for _ in range(num_simulations):
-        G_temp = G.copy()
-        remove_targets = np.random.choice(nodes, num_to_remove, replace=False)
-        G_temp.remove_nodes_from(remove_targets)
-        effs.append(nx.global_efficiency(G_temp))
-        
-    return np.mean(effs)
+        if 'lcc' in metrics:
+            if not is_empty:
+                lcc_size = len(max(nx.connected_components(G_temp), key=len))
+                results['lcc'].append(lcc_size / n_lcc)
+            else:
+                results['lcc'].append(0.0)
+                
+        if 'efficiency' in metrics:
+            if not is_empty:
+                results['efficiency'].append(nx.global_efficiency(G_temp))
+            else:
+                results['efficiency'].append(0.0)
+                
+    return results
 
-def _worker_targeted_attack(G, nodes_to_remove):
+def _worker_targeted_attack(nodes_to_remove):
+    global SHARED_GRAPH
+    G = SHARED_GRAPH
+    
     G_temp = G.copy()
     G_temp.remove_nodes_from(nodes_to_remove)
     return nx.global_efficiency(G_temp)
@@ -82,77 +99,90 @@ class NetworkAnalyzer:
         print(f"Global metrics done in {time.time()-start:.2f}s")
         return metrics
 
-    def simulate_random_attack(self, fractions, num_simulations):
+    def _run_random_simulations_generic(self, fractions, num_simulations, metric_name):
         """
-        Removes random fraction of nodes and measures size of LCC.
-        Returns: {fraction: mean_relative_lcc_size}
+        Generic driver for parallel random simulations.
         """
         start = time.time()
-        print(f"Simulating random attacks (LCC Size) - {num_simulations} runs...")
+        print(f"Simulating random attacks ({metric_name}) - {num_simulations} runs...")
         results = {}
         
-        # Prepare tasks
-        tasks = {} # future -> fraction
+        # Calculate optimal batch size
+        # We want at least 4x CPU count tasks to ensure good load balancing
+        cpu_count = os.cpu_count() or 4
+        total_tasks_target = cpu_count * 4
         
-        with ProcessPoolExecutor() as executor:
+        # Very rough heuristic: splits per fraction
+        # If we have 10 fractions and want 40 tasks, we need 4 splits per fraction
+        # But ensure min batch size so overhead isn't too high
+        tasks_per_fraction = max(1, total_tasks_target // len(fractions))
+        batch_size = max(1, num_simulations // tasks_per_fraction)
+        
+        # Ensure exact coverage
+        # Actually simpler: just generate chunks
+        chunks = []
+        remaining = num_simulations
+        while remaining > 0:
+            take = min(batch_size, remaining)
+            chunks.append(take)
+            remaining -= take
+            
+        print(f"  -> Parallel Strategy: {len(chunks)} chunks/fraction (batch size ~{batch_size})")
+
+        # Prepare base value for f=0 outside loop
+        if metric_name == 'lcc':
+            base_val = 1.0
+        else:
+            base_val = nx.global_efficiency(self.G_lcc)
+
+        futures_map = {} # future -> fraction
+
+        with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G_lcc,)) as executor:
             for f in fractions:
                 if f == 0:
-                    results[str(f)] = 1.0
+                    results[str(f)] = base_val
                     continue
-                    
+                
                 num_to_remove = int(self.n_lcc * f)
-                # Submit task
-                future = executor.submit(_worker_random_attack_lcc, self.G_lcc, num_to_remove, num_simulations, self.n_lcc)
-                tasks[future] = f
+                
+                for chunk_size in chunks:
+                    future = executor.submit(
+                        _worker_random_attack_batch, 
+                        num_to_remove, 
+                        chunk_size, 
+                        self.n_lcc, 
+                        [metric_name]
+                    )
+                    futures_map[future] = f
 
-            # Progress monitoring
-            # We filter out f=0 from tasks, so total is len(fractions)-1 usually
-            for future in tqdm(as_completed(tasks), total=len(tasks), desc="Random Attack (LCC)"):
-                f = tasks[future]
+            # Aggregator for chunks
+            temp_results = {str(f): [] for f in fractions}
+            
+            for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=f"Random ({metric_name})"):
+                f = futures_map[future]
                 try:
-                    res = future.result()
-                    results[str(f)] = res
+                    res_dict = future.result()
+                    # res_dict is {'metric': [values...]}
+                    temp_results[str(f)].extend(res_dict[metric_name])
                 except Exception as e:
                     print(f"Error for fraction {f}: {e}")
-                    results[str(f)] = 0.0
-            
-        print(f"Random attacks (LCC Size) done in {time.time()-start:.2f}s")
+
+        # Final average
+        for f, values in temp_results.items():
+            if f == str(0): continue # already set
+            if values:
+                results[f] = np.mean(values)
+            else:
+                results[f] = 0.0
+                
+        print(f"Random attacks ({metric_name}) done in {time.time()-start:.2f}s")
         return results
+
+    def simulate_random_attack(self, fractions, num_simulations):
+        return self._run_random_simulations_generic(fractions, num_simulations, 'lcc')
 
     def simulate_random_attack_efficiency(self, fractions, num_simulations):
-        """
-        Removes random fraction of nodes and measures Global Efficiency.
-        Returns: {fraction: mean_efficiency}
-        """
-        start = time.time()
-        print(f"Simulating random attacks (Efficiency) - {num_simulations} runs...")
-        results = {}
-        
-        # Base efficiency
-        base_eff = nx.global_efficiency(self.G_lcc)
-        
-        tasks = {}
-        
-        with ProcessPoolExecutor() as executor:
-            for f in fractions:
-                if f == 0:
-                    results[str(f)] = base_eff
-                    continue
-                
-                num_to_remove = int(self.n_lcc * f)
-                future = executor.submit(_worker_random_attack_efficiency, self.G_lcc, num_to_remove, num_simulations)
-                tasks[future] = f
-                
-            for future in tqdm(as_completed(tasks), total=len(tasks), desc="Random Attack (Eff)"):
-                f = tasks[future]
-                try:
-                    results[str(f)] = future.result()
-                except Exception as e:
-                    print(f"Error for fraction {f}: {e}")
-                    results[str(f)] = 0.0
-            
-        print(f"Random attacks (Efficiency) done in {time.time()-start:.2f}s")
-        return results
+        return self._run_random_simulations_generic(fractions, num_simulations, 'efficiency')
 
     def simulate_targeted_attack(self, fractions, strategy='degree'):
         """
@@ -200,7 +230,7 @@ class NetworkAnalyzer:
         
         results = {}
         tasks = {}
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G_lcc,)) as executor:
             for f in fractions:
                 if f == 0:
                     results[str(f)] = nx.global_efficiency(self.G_lcc)
@@ -209,7 +239,7 @@ class NetworkAnalyzer:
                 num_to_remove = int(self.n_lcc * f)
                 targets = sorted_nodes[:num_to_remove]
                 
-                future = executor.submit(_worker_targeted_attack, self.G_lcc, targets)
+                future = executor.submit(_worker_targeted_attack, targets)
                 tasks[future] = f
             
             for future in tqdm(as_completed(tasks), total=len(tasks), desc=f"Targeted ({strategy})"):
