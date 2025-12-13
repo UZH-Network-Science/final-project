@@ -20,8 +20,8 @@ class NetworkAnalyzer:
 
     def calculate_global_metrics(self):
         """Calculates scalar metrics for the graph."""
-        print("Calculating global metrics...")
         start = time.time()
+        print("Calculating global metrics...")
         
         metrics = {
             "num_nodes": self.G.number_of_nodes(),
@@ -46,6 +46,7 @@ class NetworkAnalyzer:
         Removes random fraction of nodes and measures size of LCC.
         Returns: {fraction: mean_relative_lcc_size}
         """
+        start = time.time()
         print(f"Simulating random attacks (LCC Size) - {num_simulations} runs...")
         results = {}
         
@@ -75,6 +76,7 @@ class NetworkAnalyzer:
             
             results[str(f)] = np.mean(sizes)
             
+        print(f"Random attacks (LCC Size) done in {time.time()-start:.2f}s")
         return results
 
     def simulate_random_attack_efficiency(self, fractions, num_simulations):
@@ -82,6 +84,7 @@ class NetworkAnalyzer:
         Removes random fraction of nodes and measures Global Efficiency.
         Returns: {fraction: mean_efficiency}
         """
+        start = time.time()
         print(f"Simulating random attacks (Efficiency) - {num_simulations} runs...")
         results = {}
         
@@ -111,6 +114,7 @@ class NetworkAnalyzer:
                 
             results[str(f)] = np.mean(effs)
             
+        print(f"Random attacks (Efficiency) done in {time.time()-start:.2f}s")
         return results
 
     def simulate_targeted_attack(self, fractions, strategy='degree'):
@@ -118,6 +122,7 @@ class NetworkAnalyzer:
         Removes nodes based on centrality strategy.
         Returns: {fraction: efficiency}
         """
+        start = time.time()
         print(f"Simulating targeted attack ({strategy})...")
         
         if strategy == 'degree':
@@ -170,4 +175,5 @@ class NetworkAnalyzer:
             
             results[str(f)] = nx.global_efficiency(G_temp)
             
+        print(f"Targeted attack ({strategy}) done in {time.time()-start:.2f}s")
         return results
