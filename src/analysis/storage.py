@@ -22,7 +22,7 @@ class ResultsManager:
         path = self._get_path(country_name)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w') as f:
-            json.dump(results, f, indent=4)
+            json.dump(results, f, indent=4, sort_keys=True)
         print(f"Saved metrics to {path}")
 
     def get_cached_or_run(self, country_name, key, run_func, current_params=None, override=False):
