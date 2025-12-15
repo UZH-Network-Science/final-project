@@ -87,15 +87,17 @@ class NetworkAnalyzer:
             "num_edges": self.G.number_of_edges(),
             "lcc_nodes": self.n_lcc,
             "lcc_edges": self.G_lcc.number_of_edges(),
+            # Note nx raises error if G has multiple components for avg shortest path length
             "average_path_length_topo": nx.average_shortest_path_length(self.G_lcc),
-            "average_clustering_coefficient": nx.average_clustering(self.G_lcc),
-            "global_efficiency": nx.global_efficiency(self.G_lcc),
-            "local_efficiency": nx.local_efficiency(self.G_lcc),
+            "average_clustering_coefficient": nx.average_clustering(self.G),
+            "global_efficiency": nx.global_efficiency(self.G),
+            "local_efficiency": nx.local_efficiency(self.G),
         }
         
         # Weighted path length if weights exist
-        if nx.get_edge_attributes(self.G_lcc, 'weight'):
-             metrics["average_path_length_weighted"] = nx.average_shortest_path_length(self.G_lcc, weight='weight')
+        if nx.get_edge_attributes(self.G, 'weight'):
+            # Note nx raises error if G has multiple components for avg shortest path length
+            metrics["average_path_length_weighted"] = nx.average_shortest_path_length(self.G_lcc, weight='weight')
         
         print(f"Global metrics done in {time.time()-start:.2f}s")
         return metrics
@@ -136,19 +138,19 @@ class NetworkAnalyzer:
         # Base values (f=0)
         base_values = {
             'lcc': 1.0,
-            'efficiency': nx.global_efficiency(self.G_lcc)
+            'efficiency': nx.global_efficiency(self.G)
         }
 
         futures_map = {} # future -> fraction
 
-        with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G_lcc,)) as executor:
+        with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G,)) as executor:
             for f in fractions:
                 if f == 0:
                     for m in metric_names:
                         final_results[m][str(f)] = base_values[m]
                     continue
                 
-                num_to_remove = int(self.n_lcc * f)
+                num_to_remove = int(self.n_original * f)
                 
                 for chunk_size in chunks:
                     future = executor.submit(
@@ -156,7 +158,7 @@ class NetworkAnalyzer:
                         strategy, # Passes the Strategy object (must be picklable)
                         num_to_remove, 
                         chunk_size, 
-                        self.n_lcc, 
+                        self.n_original, 
                         metric_names
                     )
                     futures_map[future] = f
@@ -197,15 +199,15 @@ class NetworkAnalyzer:
         """
         # Factory logic
         if strategy_name == 'degree':
-            strategy = DegreeStrategy(self.G_lcc, inverse=False)
+            strategy = DegreeStrategy(self.G, inverse=False)
         elif strategy_name == 'inverse_degree':
-            strategy = DegreeStrategy(self.G_lcc, inverse=True)
+            strategy = DegreeStrategy(self.G, inverse=True)
         elif strategy_name == 'betweenness':
-            strategy = BetweennessStrategy(self.G_lcc, inverse=False)
+            strategy = BetweennessStrategy(self.G, inverse=False)
         elif strategy_name == 'inverse_betweenness':
-            strategy = BetweennessStrategy(self.G_lcc, inverse=True)
+            strategy = BetweennessStrategy(self.G, inverse=True)
         elif strategy_name == 'articulation':
-            strategy = ArticulationPointStrategy(self.G_lcc)
+            strategy = ArticulationPointStrategy(self.G)
         else:
             raise ValueError(f"Unknown strategy: {strategy_name}")
             
