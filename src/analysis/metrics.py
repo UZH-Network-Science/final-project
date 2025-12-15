@@ -7,6 +7,12 @@ from tqdm import tqdm
 from functools import partial
 
 
+from abc import ABC, abstractmethod
+from src.analysis.strategies import (
+    AttackStrategy, RandomStrategy, StaticTargetedStrategy,
+    DegreeStrategy, BetweennessStrategy, ArticulationPointStrategy
+)
+
 # Global variable to hold the shared graph in each worker process
 SHARED_GRAPH = None
 
@@ -14,24 +20,27 @@ def _init_worker(G):
     global SHARED_GRAPH
     SHARED_GRAPH = G
 
-def _worker_random_attack_batch(num_to_remove, num_simulations, n_lcc, metrics):
+
+
+def _worker_simulation(strategy, num_to_remove, num_simulations, n_lcc, metrics):
     """
-    Unified worker that can compute multiple metrics on the same perturbed graphs.
+    Unified worker that delegates node selection to the Strategy.
     """
     global SHARED_GRAPH
     G = SHARED_GRAPH
     
     results = {m: [] for m in metrics}
-    nodes = list(G.nodes())
-    
-    if num_to_remove >= len(nodes):
+    # Safety check
+    if num_to_remove >= G.number_of_nodes():
         for m in metrics:
             results[m] = [0.0] * num_simulations
         return results
 
     for _ in range(num_simulations):
         G_temp = G.copy()
-        remove_targets = np.random.choice(nodes, num_to_remove, replace=False)
+        
+        # Strategy decides WHICH nodes to remove
+        remove_targets = strategy.select_nodes(G, num_to_remove)
         G_temp.remove_nodes_from(remove_targets)
         
         # Check if graph is empty once
@@ -51,14 +60,6 @@ def _worker_random_attack_batch(num_to_remove, num_simulations, n_lcc, metrics):
                 results['efficiency'].append(0.0)
                 
     return results
-
-def _worker_targeted_attack(nodes_to_remove):
-    global SHARED_GRAPH
-    G = SHARED_GRAPH
-    
-    G_temp = G.copy()
-    G_temp.remove_nodes_from(nodes_to_remove)
-    return nx.global_efficiency(G_temp)
 
 class NetworkAnalyzer:
     def __init__(self, G):
@@ -99,27 +100,32 @@ class NetworkAnalyzer:
         print(f"Global metrics done in {time.time()-start:.2f}s")
         return metrics
 
-    def _run_random_simulations_generic(self, fractions, num_simulations, metric_name):
+    def simulate_attack(self, strategy, fractions, num_simulations=1):
         """
-        Generic driver for parallel random simulations.
+        Unified entry point for any attack strategy.
+        Returns: {'lcc': {}, 'efficiency': {}}
         """
+        metric_names = ['lcc', 'efficiency']
+        # Determine label for progress bar
+        if isinstance(strategy, RandomStrategy):
+            desc = "Random Attack"
+        elif isinstance(strategy, StaticTargetedStrategy):
+            desc = "Targeted Attack"
+        else:
+            desc = "Attack Simulation"
+            
         start = time.time()
-        print(f"Simulating random attacks ({metric_name}) - {num_simulations} runs...")
-        results = {}
+        print(f"Simulating {desc} (Unified) - {num_simulations} runs...")
         
-        # Calculate optimal batch size
-        # We want at least 4x CPU count tasks to ensure good load balancing
+        final_results = {m: {} for m in metric_names}
+        
+        # Calculate optimal batch size for parallelism
         cpu_count = os.cpu_count() or 4
+        # Heuristic: split heavily if few fractions
         total_tasks_target = cpu_count * 4
-        
-        # Very rough heuristic: splits per fraction
-        # If we have 10 fractions and want 40 tasks, we need 4 splits per fraction
-        # But ensure min batch size so overhead isn't too high
         tasks_per_fraction = max(1, total_tasks_target // len(fractions))
         batch_size = max(1, num_simulations // tasks_per_fraction)
         
-        # Ensure exact coverage
-        # Actually simpler: just generate chunks
         chunks = []
         remaining = num_simulations
         while remaining > 0:
@@ -127,128 +133,82 @@ class NetworkAnalyzer:
             chunks.append(take)
             remaining -= take
             
-        print(f"  -> Parallel Strategy: {len(chunks)} chunks/fraction (batch size ~{batch_size})")
-
-        # Prepare base value for f=0 outside loop
-        if metric_name == 'lcc':
-            base_val = 1.0
-        else:
-            base_val = nx.global_efficiency(self.G_lcc)
+        # Base values (f=0)
+        base_values = {
+            'lcc': 1.0,
+            'efficiency': nx.global_efficiency(self.G_lcc)
+        }
 
         futures_map = {} # future -> fraction
 
         with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G_lcc,)) as executor:
             for f in fractions:
                 if f == 0:
-                    results[str(f)] = base_val
+                    for m in metric_names:
+                        final_results[m][str(f)] = base_values[m]
                     continue
                 
                 num_to_remove = int(self.n_lcc * f)
                 
                 for chunk_size in chunks:
                     future = executor.submit(
-                        _worker_random_attack_batch, 
+                        _worker_simulation, 
+                        strategy, # Passes the Strategy object (must be picklable)
                         num_to_remove, 
                         chunk_size, 
                         self.n_lcc, 
-                        [metric_name]
+                        metric_names
                     )
                     futures_map[future] = f
 
-            # Aggregator for chunks
-            temp_results = {str(f): [] for f in fractions}
+            # Aggregator
+            temp_results = {str(f): {m: [] for m in metric_names} for f in fractions}
             
-            for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=f"Random ({metric_name})"):
+            for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=desc):
                 f = futures_map[future]
                 try:
                     res_dict = future.result()
-                    # res_dict is {'metric': [values...]}
-                    temp_results[str(f)].extend(res_dict[metric_name])
+                    for m in metric_names:
+                        temp_results[str(f)][m].extend(res_dict[m])
                 except Exception as e:
                     print(f"Error for fraction {f}: {e}")
 
         # Final average
-        for f, values in temp_results.items():
-            if f == str(0): continue # already set
-            if values:
-                results[f] = np.mean(values)
-            else:
-                results[f] = 0.0
+        for f, metric_data in temp_results.items():
+            if float(f) == 0: continue
+            for m in metric_names:
+                values = metric_data[m]
+                if values:
+                    final_results[m][f] = np.mean(values)
+                else:
+                    final_results[m][f] = 0.0
                 
-        print(f"Random attacks ({metric_name}) done in {time.time()-start:.2f}s")
-        return results
+        print(f"{desc} done in {time.time()-start:.2f}s")
+        return final_results
 
-    def simulate_random_attack(self, fractions, num_simulations):
-        return self._run_random_simulations_generic(fractions, num_simulations, 'lcc')
+    # --- Convenience Wrappers for API Compatibility ---
 
-    def simulate_random_attack_efficiency(self, fractions, num_simulations):
-        return self._run_random_simulations_generic(fractions, num_simulations, 'efficiency')
+    def simulate_random_attacks(self, fractions, num_simulations):
+        return self.simulate_attack(RandomStrategy(), fractions, num_simulations)
 
-    def simulate_targeted_attack(self, fractions, strategy='degree'):
+    def simulate_targeted_attack(self, fractions, strategy_name='degree'):
         """
-        Removes nodes based on centrality strategy.
-        Returns: {fraction: efficiency}
+        Wrapper to create the appropriate strategy object and run simulations.
         """
-        start = time.time()
-        print(f"Simulating targeted attack ({strategy})...")
-        
-        if strategy == 'degree':
-            centrality = nx.degree_centrality(self.G_lcc)
-            reverse = True
-        elif strategy == 'inverse_degree':
-            centrality = nx.degree_centrality(self.G_lcc)
-            reverse = False
-        elif strategy == 'betweenness':
-             print("Calculating Betweenness (this may take a while)...")
-             centrality = nx.betweenness_centrality(self.G_lcc)
-             reverse = True
-        elif strategy == 'inverse_betweenness':
-             print("Calculating Betweenness (this may take a while)...")
-             centrality = nx.betweenness_centrality(self.G_lcc)
-             reverse = False
-        elif strategy == 'articulation':
-             # Hybrid Strategy: Articulation Points first (sorted by degree), then High Degree
-             print("identifying Articulation Points...")
-             articulation_points = set(nx.articulation_points(self.G_lcc))
-             degree_cent = nx.degree_centrality(self.G_lcc)
-             
-             # Sort Articulation Points by Degree
-             ap_list = sorted([n for n in articulation_points], key=degree_cent.get, reverse=True)
-             
-             # Sort Non-Articulation Points by Degree
-             others = sorted([n for n in degree_cent if n not in articulation_points], key=degree_cent.get, reverse=True)
-             
-             # Combined list
-             sorted_nodes = ap_list + others
-             centrality = None # Not needed for sorting anymore
-             reverse = None    # Already sorted
+        # Factory logic
+        if strategy_name == 'degree':
+            strategy = DegreeStrategy(self.G_lcc, inverse=False)
+        elif strategy_name == 'inverse_degree':
+            strategy = DegreeStrategy(self.G_lcc, inverse=True)
+        elif strategy_name == 'betweenness':
+            strategy = BetweennessStrategy(self.G_lcc, inverse=False)
+        elif strategy_name == 'inverse_betweenness':
+            strategy = BetweennessStrategy(self.G_lcc, inverse=True)
+        elif strategy_name == 'articulation':
+            strategy = ArticulationPointStrategy(self.G_lcc)
         else:
-            raise ValueError(f"Unknown strategy: {strategy}")
+            raise ValueError(f"Unknown strategy: {strategy_name}")
             
-        if strategy != 'articulation':
-            sorted_nodes = sorted(centrality, key=centrality.get, reverse=reverse)
-        
-        results = {}
-        tasks = {}
-        with ProcessPoolExecutor(initializer=_init_worker, initargs=(self.G_lcc,)) as executor:
-            for f in fractions:
-                if f == 0:
-                    results[str(f)] = nx.global_efficiency(self.G_lcc)
-                    continue
-                    
-                num_to_remove = int(self.n_lcc * f)
-                targets = sorted_nodes[:num_to_remove]
-                
-                future = executor.submit(_worker_targeted_attack, targets)
-                tasks[future] = f
-            
-            for future in tqdm(as_completed(tasks), total=len(tasks), desc=f"Targeted ({strategy})"):
-                f = tasks[future]
-                try:
-                    results[str(f)] = future.result()
-                except Exception as e:
-                    print(f"Error for fraction {f}: {e}")
-                    results[str(f)] = 0.0
-            
-        print(f"Targeted attack ({strategy}) done in {time.time()-start:.2f}s")
-        return results
+        # Delegate to unified runner
+        results_all = self.simulate_attack(strategy, fractions, num_simulations=1)
+        return results_all['efficiency']
