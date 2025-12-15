@@ -9,7 +9,7 @@ class ResultsManager:
         self.metrics_dir.mkdir(parents=True, exist_ok=True)
     
     def _get_path(self, country_name):
-        return self.metrics_dir / country_name / f"{country_name}_metrics_unified.json"
+        return self.metrics_dir / country_name / f"{country_name}_metrics.json"
 
     def load_results(self, country_name):
         path = self._get_path(country_name)
