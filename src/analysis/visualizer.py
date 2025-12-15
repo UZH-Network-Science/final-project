@@ -5,8 +5,8 @@ import json
 import networkx as nx
 import numpy as np
 from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl
-from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink
-from IPython.display import display
+from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink, Output, Accordion
+from IPython.display import display, clear_output
 
 class NetworkVisualizer:
     def __init__(self):
@@ -257,17 +257,15 @@ class NetworkVisualizer:
 
     def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
         """
-        Plots multiple curves from a dictionary of results.
+        Plots multiple curves from a dictionary of results with interactive controls.
         results_dict: { 'Label': {'0.0': 1.0, '0.1': 0.8...} }
         """
-        plt.figure(figsize=(10, 6))
-        
-        # Define some default styles if config is not passed
+        # Prepare data first
+        plot_data = []
         markers = ['o', 's', '^', 'D', 'x']
         colors = ['green', 'red', 'orange', 'purple', 'blue']
         
         for i, (label, data) in enumerate(results_dict.items()):
-            # Filter and sort
             sorted_items = []
             for k, v in data.items():
                 try:
@@ -280,17 +278,74 @@ class NetworkVisualizer:
                 continue
                 
             features, values = zip(*sorted_items)
+            plot_data.append({
+                'label': label,
+                'x': features,
+                'y': values,
+                'marker': markers[i % len(markers)],
+                'color': colors[i % len(colors)]
+            })
             
-            marker = markers[i % len(markers)]
-            color = colors[i % len(colors)]
+        # Create Widgets
+        out = Output(layout=Layout(width='100%'))
+        checkboxes = {}
+        for item in plot_data:
+            checkboxes[item['label']] = Checkbox(
+                value=True,
+                description=item['label'],
+                indent=False,
+                layout=Layout(width='auto', margin='0 10px 0 0')
+            )
             
-            plt.plot(features, values, marker=marker, linestyle='-', label=label, color=color, alpha=0.8)
+        def update_plot(change=None):
+            with out:
+                clear_output(wait=True)
+                plt.figure(figsize=(15, 6))
+                
+                has_plot = False
+                for item in plot_data:
+                    if checkboxes[item['label']].value:
+                        plt.plot(
+                            item['x'], item['y'], 
+                            marker=item['marker'], 
+                            linestyle='-', 
+                            label=item['label'], 
+                            color=item['color'], 
+                            alpha=0.8
+                        )
+                        has_plot = True
+                
+                if has_plot:
+                    plt.legend()
+                    
+                plt.title(title)
+                plt.xlabel("Fraction of Nodes Removed (Log Scale)")
+                plt.ylabel(ylabel)
+                plt.xscale('log')
+                plt.grid(True, linestyle='--', alpha=0.3, which="both")
+                plt.tight_layout()
+                plt.show()
+
+        # Wire events
+        for cb in checkboxes.values():
+            cb.observe(update_plot, names='value')
             
-        plt.title(title)
-        plt.xlabel("Fraction of Nodes Removed")
-        plt.ylabel(ylabel)
-        plt.grid(True, linestyle='--', alpha=0.3)
-        plt.show()
+        # Layout
+        # Create a legend control box
+        cb_list = list(checkboxes.values())
+        # Arrange checkboxes in rows of 3 to avoid super long vertical lists if many lines
+        rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
+        controls_content = VBox([HTML("<b>Show/Hide Lines:</b>")] + rows)
+        
+        # Wrap in Accordion to create a hidden menu
+        menu = Accordion(children=[controls_content])
+        menu.set_title(0, 'Plot Controls')
+        menu.selected_index = None # Start collapsed
+        
+        display(menu, out)
+        
+        # Trigger initial plot
+        update_plot()
 
     def create_component_map(self, G):
         """
