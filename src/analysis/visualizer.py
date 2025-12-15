@@ -255,15 +255,15 @@ class NetworkVisualizer:
         display(VBox([strat_dd, slider_row]))
         display(m)
 
-    def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
+    def plot_metric_decay(self, results_dict, title="Metric Decay", ylabel="Value", log_x=True):
         """
         Plots multiple curves from a dictionary of results with interactive controls.
         results_dict: { 'Label': {'0.0': 1.0, '0.1': 0.8...} }
         """
         # Prepare data first
         plot_data = []
-        markers = ['o', 's', '^', 'D', 'x']
-        colors = ['green', 'red', 'orange', 'purple', 'blue']
+        markers = ['o', 's', '^', 'D', 'x', 'v', '<', '>']
+        colors = ['green', 'red', 'orange', 'purple', 'blue', 'brown', 'cyan', 'magenta']
         
         for i, (label, data) in enumerate(results_dict.items()):
             sorted_items = []
@@ -319,9 +319,13 @@ class NetworkVisualizer:
                     plt.legend()
                     
                 plt.title(title)
-                plt.xlabel("Fraction of Nodes Removed (Log Scale)")
+                if log_x:
+                    plt.xlabel("Fraction of Nodes Removed (Log Scale)")
+                    plt.xscale('log')
+                else:
+                    plt.xlabel("Fraction of Nodes Removed")
+                    
                 plt.ylabel(ylabel)
-                plt.xscale('log')
                 plt.grid(True, linestyle='--', alpha=0.3, which="both")
                 plt.tight_layout()
                 plt.show()
@@ -335,7 +339,7 @@ class NetworkVisualizer:
         cb_list = list(checkboxes.values())
         # Arrange checkboxes in rows of 3 to avoid super long vertical lists if many lines
         rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
-        controls_content = VBox([HTML("<b>Show/Hide Lines:</b>")] + rows)
+        controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
         
         # Wrap in Accordion to create a hidden menu
         menu = Accordion(children=[controls_content])
@@ -346,6 +350,9 @@ class NetworkVisualizer:
         
         # Trigger initial plot
         update_plot()
+
+    def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
+        return self.plot_metric_decay(results_dict, title, ylabel)
 
     def create_component_map(self, G):
         """
@@ -434,4 +441,34 @@ class NetworkVisualizer:
         m.add_control(WidgetControl(widget=html_legend, position='topright'))
         
         return m
+
+    def plot_degree_distribution(self, G, bins=50, title="Degree Distribution"):
+        """
+        Plots the degree distribution of the network (Histogram and Log-Log).
+        """
+        degrees = [d for n, d in G.degree()]
+        
+        plt.figure(figsize=(12, 5))
+        
+        # 1. Linear Scale Histogram
+        plt.subplot(1, 2, 1)
+        plt.hist(degrees, bins=bins, color='skyblue', edgecolor='black')
+        plt.title(f"{title} (Linear)")
+        plt.xlabel("Degree")
+        plt.ylabel("Count")
+        
+        # 2. Semi-Log Plot (Log Y)
+        plt.subplot(1, 2, 2)
+        
+        # Use linear bins, same as left plot, but with log yScale
+        plt.hist(degrees, bins=bins, color='salmon', edgecolor='black', log=True)
+        plt.yscale('log')
+        
+        plt.title(f"{title} (Semi-Log)")
+        plt.xlabel("Degree")
+        plt.ylabel("Count (Log)")
+        
+        plt.grid(True, which="both", ls="--", alpha=0.3)
+        plt.tight_layout()
+        plt.show()
 

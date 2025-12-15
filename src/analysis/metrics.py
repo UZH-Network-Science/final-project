@@ -48,8 +48,12 @@ def _worker_simulation(strategy, num_to_remove, num_simulations, n_lcc, metrics)
         
         if 'lcc' in metrics:
             if not is_empty:
-                lcc_size = len(max(nx.connected_components(G_temp), key=len))
-                results['lcc'].append(lcc_size / n_lcc)
+                try:
+                    largest_cc = max(nx.connected_components(G_temp), key=len)
+                    lcc_size = len(largest_cc)
+                    results['lcc'].append(lcc_size / n_lcc)
+                except ValueError: # Empty sequence
+                     results['lcc'].append(0.0)
             else:
                 results['lcc'].append(0.0)
                 
@@ -58,6 +62,43 @@ def _worker_simulation(strategy, num_to_remove, num_simulations, n_lcc, metrics)
                 results['efficiency'].append(nx.global_efficiency(G_temp))
             else:
                 results['efficiency'].append(0.0)
+
+        if 'average_degree' in metrics:
+            # (2 * E) / N
+            n = G_temp.number_of_nodes()
+            if n > 0:
+                avg_deg = (2 * G_temp.number_of_edges()) / n
+                results['average_degree'].append(avg_deg)
+            else:
+                results['average_degree'].append(0.0)
+
+        if 'clustering' in metrics:
+            if not is_empty:
+                results['clustering'].append(nx.average_clustering(G_temp))
+            else:
+                results['clustering'].append(0.0)
+
+        # Metrics that require LCC
+        if 'diameter' in metrics or 'avg_path_length' in metrics:
+            if not is_empty:
+                # We need the subgraph for these
+                try:
+                    largest_cc = max(nx.connected_components(G_temp), key=len)
+                    # Create subgraph only if needed, it's expensive
+                    G_temp_lcc = G_temp.subgraph(largest_cc)
+                    
+                    if 'diameter' in metrics:
+                        # Diameter is very slow, might warn user in docstring
+                        results['diameter'].append(nx.diameter(G_temp_lcc))
+                        
+                    if 'avg_path_length' in metrics:
+                        results['avg_path_length'].append(nx.average_shortest_path_length(G_temp_lcc))
+                except (ValueError, nx.NetworkXError):
+                    if 'diameter' in metrics: results['diameter'].append(0.0)
+                    if 'avg_path_length' in metrics: results['avg_path_length'].append(0.0)
+            else:
+                if 'diameter' in metrics: results['diameter'].append(0.0)
+                if 'avg_path_length' in metrics: results['avg_path_length'].append(0.0)
                 
     return results
 
@@ -92,6 +133,8 @@ class NetworkAnalyzer:
             "average_clustering_coefficient": nx.average_clustering(self.G),
             "global_efficiency": nx.global_efficiency(self.G),
             "local_efficiency": nx.local_efficiency(self.G),
+            "average_degree": (2 * self.G.number_of_edges()) / self.G.number_of_nodes() if self.G.number_of_nodes() > 0 else 0,
+            "diameter": nx.diameter(self.G_lcc),
         }
         
         # Weighted path length if weights exist
@@ -102,12 +145,15 @@ class NetworkAnalyzer:
         print(f"Global metrics done in {time.time()-start:.2f}s")
         return metrics
 
-    def simulate_attack(self, strategy, fractions, num_simulations=1):
+    def simulate_attack(self, strategy, fractions, num_simulations=1, metrics=None):
         """
         Unified entry point for any attack strategy.
-        Returns: {'lcc': {}, 'efficiency': {}}
+        metrics: List of metrics to compute ['lcc', 'efficiency', 'average_degree', 'clustering', 'diameter', 'avg_path_length']
+        Returns: {metric: {fraction: value}}
         """
-        metric_names = ['lcc', 'efficiency']
+        if metrics is None:
+            metrics = ['lcc', 'efficiency']
+        metric_names = metrics
         # Determine label for progress bar
         if isinstance(strategy, RandomStrategy):
             desc = "Random Attack"
@@ -136,10 +182,16 @@ class NetworkAnalyzer:
             remaining -= take
             
         # Base values (f=0)
-        base_values = {
-            'lcc': 1.0,
-            'efficiency': nx.global_efficiency(self.G)
-        }
+        # Note: We should probably compute these dynamically for consistency if not passed
+        # But for efficiency, we assume the user knows the initial state or we could calc them here.
+        # Simple fix: metrics at f=0 are just global metrics
+        base_values = {}
+        if 'lcc' in metric_names: base_values['lcc'] = 1.0 # Normalized
+        if 'efficiency' in metric_names: base_values['efficiency'] = nx.global_efficiency(self.G)
+        if 'average_degree' in metric_names: base_values['average_degree'] = (2 * self.G.number_of_edges()) / self.n_original
+        if 'clustering' in metric_names: base_values['clustering'] = nx.average_clustering(self.G)
+        if 'diameter' in metric_names: base_values['diameter'] = nx.diameter(self.G_lcc)
+        if 'avg_path_length' in metric_names: base_values['avg_path_length'] = nx.average_shortest_path_length(self.G_lcc)
 
         futures_map = {} # future -> fraction
 
@@ -190,10 +242,12 @@ class NetworkAnalyzer:
 
     # --- Convenience Wrappers for API Compatibility ---
 
-    def simulate_random_attacks(self, fractions, num_simulations):
-        return self.simulate_attack(RandomStrategy(), fractions, num_simulations)
+    def simulate_random_attacks(self, fractions, num_simulations, metrics=None):
+        if metrics is None:
+            metrics = ['lcc', 'efficiency']
+        return self.simulate_attack(RandomStrategy(), fractions, num_simulations, metrics=metrics)
 
-    def simulate_targeted_attack(self, fractions, strategy_name='degree'):
+    def simulate_targeted_attack(self, fractions, strategy_name='degree', metrics=None):
         """
         Wrapper to create the appropriate strategy object and run simulations.
         """
@@ -212,5 +266,10 @@ class NetworkAnalyzer:
             raise ValueError(f"Unknown strategy: {strategy_name}")
             
         # Delegate to unified runner
-        results_all = self.simulate_attack(strategy, fractions, num_simulations=1)
-        return results_all['efficiency']
+        if metrics is None:
+            # Default behavior for compatibility: return just efficiency dict
+            results_all = self.simulate_attack(strategy, fractions, num_simulations=1, metrics=['efficiency'])
+            return results_all['efficiency']
+        else:
+            # Extended behavior: return all requested metrics
+            return self.simulate_attack(strategy, fractions, num_simulations=1, metrics=metrics)
