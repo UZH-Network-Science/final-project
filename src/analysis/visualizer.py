@@ -305,28 +305,134 @@ class NetworkVisualizer:
                 has_plot = False
                 for item in plot_data:
                     if checkboxes[item['label']].value:
-                        plt.plot(
-                            item['x'], item['y'], 
-                            marker=item['marker'], 
-                            linestyle='-', 
-                            label=item['label'], 
-                            color=item['color'], 
-                            alpha=0.8
-                        )
+                        x = np.array(item['x'])
+                        y = np.array(item['y'])
+                        
+                        # Split zero and non-zero
+                        # Assuming sorted, 0.0 is at index 0 if present
+                        if len(x) > 0 and x[0] <= 1e-9:
+                            # Plot zero point separately (scatter, no line)
+                            plt.plot(
+                                [x[0]], [y[0]], 
+                                marker=item['marker'], 
+                                linestyle='None', 
+                                label=item['label'], # Label only one to avoid dup in legend
+                                color=item['color'], 
+                                alpha=0.8,
+                                clip_on=False  # Allow point on axis to be fully visible
+                            )
+                            # Plot rest as line
+                            if len(x) > 1:
+                                plt.plot(
+                                    x[1:], y[1:], 
+                                    marker=item['marker'], 
+                                    linestyle='-', 
+                                    label='_nolegend_', 
+                                    color=item['color'], 
+                                    alpha=0.8
+                                )
+                        else:
+                            # Standard plot
+                            plt.plot(
+                                x, y, 
+                                marker=item['marker'], 
+                                linestyle='-', 
+                                label=item['label'], 
+                                color=item['color'], 
+                                alpha=0.8
+                            )
                         has_plot = True
                 
                 if has_plot:
-                    plt.legend()
+                    # Create custom legend handle for the Start Point
+                    from matplotlib.lines import Line2D
                     
-                plt.title(title)
+                    # Get existing handles/labels
+                    handles, labels = plt.gca().get_legend_handles_labels()
+                    
+                    # Add Initial State handle
+                    start_handle = Line2D([], [], color='gray', marker='H', linestyle='None', 
+                                          markersize=8, label='Initial State')
+                    handles.append(start_handle)
+                    labels.append('Initial State')
+                    
+                    plt.legend(handles=handles, labels=labels)
+                    
+                # Manual Grid Lines for every point (x-axis)
+                all_fractions = set()
+                first_nonzero = None
+                
+                for item in plot_data:
+                    if checkboxes[item['label']].value:
+                        x = np.array(item['x'])
+                        y = np.array(item['y'])
+                        
+                        # Split zero and non-zero
+                        if len(x) > 0 and x[0] <= 1e-9:
+                            # Plot zero point separately (scatter, no line)
+                            # User requested Hexagon for the start point
+                            plt.plot(
+                                [x[0]], [y[0]], 
+                                marker='H',  # Force Hexagon
+                                linestyle='None', 
+                                label='_nolegend_', 
+                                color=item['color'], 
+                                alpha=0.8,
+                                clip_on=False,
+                                markersize=8
+                            )
+                            # Plot rest as line
+                            if len(x) > 1:
+                                plt.plot(
+                                    x[1:], y[1:], 
+                                    marker=item['marker'], 
+                                    linestyle='-', 
+                                    label=item['label'], 
+                                    color=item['color'], 
+                                    alpha=0.8
+                                )
+                        else:
+                            # Standard plot
+                            plt.plot(
+                                x, y, 
+                                marker=item['marker'], 
+                                linestyle='-', 
+                                label=item['label'], 
+                                color=item['color'], 
+                                alpha=0.8
+                            )
+                        has_plot = True
                 if log_x:
                     plt.xlabel("Fraction of Nodes Removed (Log Scale)")
-                    plt.xscale('log')
+                    # Use symlog to handle 0.0 correctly
+                    # linthresh=0.05 makes the 0-0.05 gap linear
+                    # linscale=0.05 compresses this linear region even more
+                    plt.xscale('symlog', linthresh=0.05, linscale=0.05)
+                    # Start exactly at 0
+                    plt.xlim(left=0.0)
+                    
+                    # Custom Ticks
+                    ticks = [0, 0.1, 1.0]
+                    labels = ['0', '$10^{-1}$', '$10^{0}$']
+                    
+                    # Add first non-zero point label if valid
+                    if first_nonzero is not None and first_nonzero not in ticks:
+                        ticks.append(first_nonzero)
+                        # Format nicely (e.g., 0.05)
+                        labels.append(f"{first_nonzero:.2g}")
+                        
+                        # Sort for display correctness (though matplotlib handles it)
+                        combined = sorted(zip(ticks, labels))
+                        ticks, labels = zip(*combined)
+
+                    plt.xticks(ticks, labels)
+                    plt.minorticks_off() # Turn off minor ticks to be clean
                 else:
                     plt.xlabel("Fraction of Nodes Removed")
                     
                 plt.ylabel(ylabel)
-                plt.grid(True, linestyle='--', alpha=0.3, which="both")
+                # Only Y-axis grid from default, X is manual
+                plt.grid(True, axis='y', linestyle='--', alpha=0.3)
                 plt.tight_layout()
                 plt.show()
 
