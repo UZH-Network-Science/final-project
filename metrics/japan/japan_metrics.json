@@ -596,18 +596,8 @@
         "lcc_nodes": 9698,
         "local_efficiency": 0.011122177094466367,
         "num_edges": 10952,
-        "num_nodes": 10357
-    },
-    "global_metrics_v2": {
-        "average_clustering_coefficient": 0.010920067027047812,
+        "num_nodes": 10357,
         "average_degree": 2.114898136526021,
-        "average_path_length_topo": 71.94704359583523,
-        "diameter": 343,
-        "global_efficiency": 0.017791000787040677,
-        "lcc_edges": 10327,
-        "lcc_nodes": 9698,
-        "local_efficiency": 0.011122177094466367,
-        "num_edges": 10952,
-        "num_nodes": 10357
+        "diameter": 343
     }
 }
