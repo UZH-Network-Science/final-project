@@ -5,8 +5,8 @@ import json
 import networkx as nx
 import numpy as np
 from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl
-from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink
-from IPython.display import display
+from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink, Output, Accordion
+from IPython.display import display, clear_output
 
 class NetworkVisualizer:
     def __init__(self):
@@ -255,19 +255,17 @@ class NetworkVisualizer:
         display(VBox([strat_dd, slider_row]))
         display(m)
 
-    def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
+    def plot_metric_decay(self, results_dict, title="Metric Decay", ylabel="Value", log_x=True):
         """
-        Plots multiple curves from a dictionary of results.
+        Plots multiple curves from a dictionary of results with interactive controls.
         results_dict: { 'Label': {'0.0': 1.0, '0.1': 0.8...} }
         """
-        plt.figure(figsize=(10, 6))
-        
-        # Define some default styles if config is not passed
-        markers = ['o', 's', '^', 'D', 'x']
-        colors = ['green', 'red', 'orange', 'purple', 'blue']
+        # Prepare data first
+        plot_data = []
+        markers = ['o', 's', '^', 'D', 'x', 'v', '<', '>']
+        colors = ['green', 'red', 'orange', 'purple', 'blue', 'brown', 'cyan', 'magenta']
         
         for i, (label, data) in enumerate(results_dict.items()):
-            # Filter and sort
             sorted_items = []
             for k, v in data.items():
                 try:
@@ -280,17 +278,187 @@ class NetworkVisualizer:
                 continue
                 
             features, values = zip(*sorted_items)
+            plot_data.append({
+                'label': label,
+                'x': features,
+                'y': values,
+                'marker': markers[i % len(markers)],
+                'color': colors[i % len(colors)]
+            })
             
-            marker = markers[i % len(markers)]
-            color = colors[i % len(colors)]
+        # Create Widgets
+        out = Output(layout=Layout(width='100%'))
+        checkboxes = {}
+        for item in plot_data:
+            checkboxes[item['label']] = Checkbox(
+                value=True,
+                description=item['label'],
+                indent=False,
+                layout=Layout(width='auto', margin='0 10px 0 0')
+            )
             
-            plt.plot(features, values, marker=marker, linestyle='-', label=label, color=color, alpha=0.8)
+        def update_plot(change=None):
+            with out:
+                clear_output(wait=True)
+                plt.figure(figsize=(15, 6))
+                
+                has_plot = False
+                for item in plot_data:
+                    if checkboxes[item['label']].value:
+                        x = np.array(item['x'])
+                        y = np.array(item['y'])
+                        
+                        # Split zero and non-zero
+                        # Assuming sorted, 0.0 is at index 0 if present
+                        if len(x) > 0 and x[0] <= 1e-9:
+                            # Plot zero point separately (scatter, no line)
+                            plt.plot(
+                                [x[0]], [y[0]], 
+                                marker=item['marker'], 
+                                linestyle='None', 
+                                label=item['label'], # Label only one to avoid dup in legend
+                                color=item['color'], 
+                                alpha=0.8,
+                                clip_on=False  # Allow point on axis to be fully visible
+                            )
+                            # Plot rest as line
+                            if len(x) > 1:
+                                plt.plot(
+                                    x[1:], y[1:], 
+                                    marker=item['marker'], 
+                                    linestyle='-', 
+                                    label='_nolegend_', 
+                                    color=item['color'], 
+                                    alpha=0.8
+                                )
+                        else:
+                            # Standard plot
+                            plt.plot(
+                                x, y, 
+                                marker=item['marker'], 
+                                linestyle='-', 
+                                label=item['label'], 
+                                color=item['color'], 
+                                alpha=0.8
+                            )
+                        has_plot = True
+                
+                if has_plot:
+                    # Create custom legend handle for the Start Point
+                    from matplotlib.lines import Line2D
+                    
+                    # Get existing handles/labels
+                    handles, labels = plt.gca().get_legend_handles_labels()
+                    
+                    # Add Initial State handle
+                    start_handle = Line2D([], [], color='gray', marker='H', linestyle='None', 
+                                          markersize=8, label='Initial State')
+                    handles.append(start_handle)
+                    labels.append('Initial State')
+                    
+                    plt.legend(handles=handles, labels=labels)
+                    
+                # Manual Grid Lines for every point (x-axis)
+                all_fractions = set()
+                first_nonzero = None
+                
+                for item in plot_data:
+                    if checkboxes[item['label']].value:
+                        x = np.array(item['x'])
+                        y = np.array(item['y'])
+                        
+                        # Split zero and non-zero
+                        if len(x) > 0 and x[0] <= 1e-9:
+                            # Plot zero point separately (scatter, no line)
+                            # User requested Hexagon for the start point
+                            plt.plot(
+                                [x[0]], [y[0]], 
+                                marker='H',  # Force Hexagon
+                                linestyle='None', 
+                                label='_nolegend_', 
+                                color=item['color'], 
+                                alpha=0.8,
+                                clip_on=False,
+                                markersize=8
+                            )
+                            # Plot rest as line
+                            if len(x) > 1:
+                                plt.plot(
+                                    x[1:], y[1:], 
+                                    marker=item['marker'], 
+                                    linestyle='-', 
+                                    label=item['label'], 
+                                    color=item['color'], 
+                                    alpha=0.8
+                                )
+                        else:
+                            # Standard plot
+                            plt.plot(
+                                x, y, 
+                                marker=item['marker'], 
+                                linestyle='-', 
+                                label=item['label'], 
+                                color=item['color'], 
+                                alpha=0.8
+                            )
+                        has_plot = True
+                if log_x:
+                    plt.xlabel("Fraction of Nodes Removed (Log Scale)")
+                    # Use symlog to handle 0.0 correctly
+                    # linthresh=0.05 makes the 0-0.05 gap linear
+                    # linscale=0.05 compresses this linear region even more
+                    plt.xscale('symlog', linthresh=0.05, linscale=0.05)
+                    # Start exactly at 0
+                    plt.xlim(left=0.0)
+                    
+                    # Custom Ticks
+                    ticks = [0, 0.1, 1.0]
+                    labels = ['0', '$10^{-1}$', '$10^{0}$']
+                    
+                    # Add first non-zero point label if valid
+                    if first_nonzero is not None and first_nonzero not in ticks:
+                        ticks.append(first_nonzero)
+                        # Format nicely (e.g., 0.05)
+                        labels.append(f"{first_nonzero:.2g}")
+                        
+                        # Sort for display correctness (though matplotlib handles it)
+                        combined = sorted(zip(ticks, labels))
+                        ticks, labels = zip(*combined)
+
+                    plt.xticks(ticks, labels)
+                    plt.minorticks_off() # Turn off minor ticks to be clean
+                else:
+                    plt.xlabel("Fraction of Nodes Removed")
+                    
+                plt.ylabel(ylabel)
+                # Only Y-axis grid from default, X is manual
+                plt.grid(True, axis='y', linestyle='--', alpha=0.3)
+                plt.tight_layout()
+                plt.show()
+
+        # Wire events
+        for cb in checkboxes.values():
+            cb.observe(update_plot, names='value')
             
-        plt.title(title)
-        plt.xlabel("Fraction of Nodes Removed")
-        plt.ylabel(ylabel)
-        plt.grid(True, linestyle='--', alpha=0.3)
-        plt.show()
+        # Layout
+        # Create a legend control box
+        cb_list = list(checkboxes.values())
+        # Arrange checkboxes in rows of 3 to avoid super long vertical lists if many lines
+        rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
+        controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
+        
+        # Wrap in Accordion to create a hidden menu
+        menu = Accordion(children=[controls_content])
+        menu.set_title(0, 'Plot Controls')
+        menu.selected_index = None # Start collapsed
+        
+        display(menu, out)
+        
+        # Trigger initial plot
+        update_plot()
+
+    def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
+        return self.plot_metric_decay(results_dict, title, ylabel)
 
     def create_component_map(self, G):
         """
@@ -379,4 +547,34 @@ class NetworkVisualizer:
         m.add_control(WidgetControl(widget=html_legend, position='topright'))
         
         return m
+
+    def plot_degree_distribution(self, G, bins=50, title="Degree Distribution"):
+        """
+        Plots the degree distribution of the network (Histogram and Log-Log).
+        """
+        degrees = [d for n, d in G.degree()]
+        
+        plt.figure(figsize=(12, 5))
+        
+        # 1. Linear Scale Histogram
+        plt.subplot(1, 2, 1)
+        plt.hist(degrees, bins=bins, color='skyblue', edgecolor='black')
+        plt.title(f"{title} (Linear)")
+        plt.xlabel("Degree")
+        plt.ylabel("Count")
+        
+        # 2. Semi-Log Plot (Log Y)
+        plt.subplot(1, 2, 2)
+        
+        # Use linear bins, same as left plot, but with log yScale
+        plt.hist(degrees, bins=bins, color='salmon', edgecolor='black', log=True)
+        plt.yscale('log')
+        
+        plt.title(f"{title} (Semi-Log)")
+        plt.xlabel("Degree")
+        plt.ylabel("Count (Log)")
+        
+        plt.grid(True, which="both", ls="--", alpha=0.3)
+        plt.tight_layout()
+        plt.show()
 
