@@ -392,7 +392,7 @@ class NetworkVisualizer:
                         
                         # Split zero and non-zero
                         if len(x) > 0 and x[0] <= 1e-9:
-                            # Plot zero point separately (scatter, no line)
+                            # Plot zero point separately (Always scatter)
                             # User requested Hexagon for the start point
                             plt.plot(
                                 [x[0]], [y[0]], 
@@ -404,18 +404,33 @@ class NetworkVisualizer:
                                 clip_on=False,
                                 markersize=8
                             )
-                            # Plot rest as line
+
+                            # Decisions for line plotting
+                            should_connect = connect_chk.value
+                            
                             if len(x) > 1:
-                                plt.plot(
-                                    x[1:], y[1:], 
-                                    marker=item['marker'], 
-                                    linestyle=item['linestyle'], 
-                                    label=item['label'], 
-                                    color=item['color'], 
-                                    alpha=0.8
-                                )
+                                if should_connect:
+                                    # Plot FULL line from index 0
+                                    plt.plot(
+                                        x, y, 
+                                        marker=item['marker'], 
+                                        linestyle=item['linestyle'], 
+                                        label=item['label'], 
+                                        color=item['color'], 
+                                        alpha=0.8
+                                    )
+                                else:
+                                    # Plot line starting from index 1 (Gap)
+                                    plt.plot(
+                                        x[1:], y[1:], 
+                                        marker=item['marker'], 
+                                        linestyle=item['linestyle'], 
+                                        label=item['label'], 
+                                        color=item['color'], 
+                                        alpha=0.8
+                                    )
                         else:
-                            # Standard plot
+                            # Standard plot (no zero point found)
                             plt.plot(
                                 x, y, 
                                 marker=item['marker'], 
@@ -463,6 +478,36 @@ class NetworkVisualizer:
         for cb in checkboxes.values():
             cb.observe(update_plot, names='value')
             
+        # --- Smart Connectivity Default Logic ---
+        # User feedback: "If comparing different attacks on same country (same start point), disconnected."
+        # "If comparing countries (diff start point), connected."
+        # Logic: Check variance of y-values at x=0.
+        
+        start_points = []
+        for item in plot_data:
+            x = item['x']
+            y = item['y']
+            if len(x) > 0 and x[0] <= 1e-9:
+                start_points.append(y[0])
+        
+        # Check if all start points are effectively equal
+        connect_default = True
+        if start_points:
+            # Use small tolerance for float comparison
+            if np.allclose(start_points, start_points[0], atol=1e-5):
+                connect_default = False # Same start point -> Disconnected by default
+            else:
+                connect_default = True # Different start points -> Connected by default
+
+        # New Graph Settings Control
+        connect_chk = Checkbox(
+            value=connect_default,
+            description='Connect Initial State',
+            indent=False,
+            layout=Layout(width='auto')
+        )
+        connect_chk.observe(update_plot, names='value')
+        
         # Layout
         # Check if we can group by Strategy (Pattern: "Country - Strategy")
         grouped_by_strategy = {}
@@ -481,13 +526,11 @@ class NetworkVisualizer:
                     grouped_by_strategy[strategy].append(checkboxes[label])
                     is_grouped = True
         
+        controls_content = None
         if is_grouped:
             # Create Rows by Strategy
             rows = []
             for strategy in strategies_order:
-                # Add Strategy Label if desired, or just list the checkboxes
-                # Since the checkbox label is "Switzerland - Random", it might be repetitive.
-                # But kept simple for now: Just a row of checkboxes for that strategy
                 row_content = grouped_by_strategy[strategy]
                 rows.append(HBox(row_content, layout=Layout(margin='5px 0')))
             
@@ -498,10 +541,14 @@ class NetworkVisualizer:
             rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
             controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
         
+        # Graph Settings Menu
+        settings_content = VBox([HTML("<b>Visual Options:</b>"), connect_chk])
+        
         # Wrap in Accordion to create a hidden menu
-        menu = Accordion(children=[controls_content])
+        menu = Accordion(children=[controls_content, settings_content])
         menu.set_title(0, 'Plot Controls')
-        menu.selected_index = None # Start collapsed
+        menu.set_title(1, 'Graph Settings')
+        menu.selected_index = 0 # Expand Plot Controls by default
         
         display(menu, out)
         
