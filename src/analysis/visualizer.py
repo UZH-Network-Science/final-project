@@ -54,6 +54,7 @@ class NetworkVisualizer:
         """
         Creates an interactive ipyleaflet map with sliders for robustness analysis.
         Includes Visual Layer Control (Checkboxes) and Finite-Step Slider.
+        Updated to match Comparison_Analysis features (Ghost nodes, Stable Random, correct Z-order).
         """
         # Pre-process coordinates for speed
         geojson_pos = {}
@@ -79,14 +80,13 @@ class NetworkVisualizer:
         degree_cent = nx.degree_centrality(G)
         articulation_points = set(nx.articulation_points(G))
         
+        # Removed limit per user request - Always show nodes
+        # Use degree as proxy for betweenness if too large, but still allow interaction
         if len(G) > 5000:
-            print("Graph is large (>5k nodes). Skipping calculate-on-the-fly Betweenness for interactivity speed.")
+            print("Graph is large (>5k nodes). using degree as proxy for betweenness for initial load speed.")
             betweenness_cent = degree_cent 
-            # Performance Guard:
-            skip_nodes = True
         else:
             betweenness_cent = nx.betweenness_centrality(G)
-            skip_nodes = False
 
         sorted_degree = sorted(degree_cent, key=degree_cent.get, reverse=True)
         sorted_betweenness = sorted(betweenness_cent, key=betweenness_cent.get, reverse=True)
@@ -107,17 +107,20 @@ class NetworkVisualizer:
         style_red_edge = {'color': 'red', 'weight': 1, 'opacity': 0.6}
         style_blue_node = {'radius': 3, 'color': 'blue', 'fillColor': 'blue', 'fillOpacity': 0.8, 'weight': 1}
         style_red_node = {'radius': 3, 'color': 'red', 'fillColor': 'red', 'fillOpacity': 0.8, 'weight': 1}
+        style_gray_node = {'radius': 2, 'color': '#999999', 'fillColor': '#999999', 'fillOpacity': 0.3, 'weight': 1}
 
+        layer_nodes_removed = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_gray_node, name='Nodes (Removed)')
         layer_edges_blue = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_blue_edge, name='Edges (Core)')
         layer_edges_red = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, style=style_red_edge, name='Edges (Isolated)')
-        
         layer_nodes_blue = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_blue_node, name='Nodes (Core)')
         layer_nodes_red = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, point_style=style_red_node, name='Nodes (Isolated)')
 
+        # Z-Order: Bottom -> Top
+        m.add_layer(layer_nodes_removed)
         m.add_layer(layer_edges_blue)
         m.add_layer(layer_edges_red)
-        m.add_layer(layer_nodes_blue)
         m.add_layer(layer_nodes_red)
+        m.add_layer(layer_nodes_blue)
 
         # 3. Consolidated Legend & Layer Control
         def legend_icon(color, shape='line'):
@@ -126,34 +129,37 @@ class NetworkVisualizer:
             else:
                 return f'<i style="background: {color}; width: 10px; height: 10px; display: inline-block; border-radius: 50%; vertical-align: middle; margin-right: 5px;"></i>'
 
-        label_edges_blue = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges (Connected)</b>")
-        label_edges_red = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
-        label_nodes_blue = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes (Connected)</b>")
-        label_nodes_red = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
-        
+        # Granular Controls (Restored & Enhanced)
         check_edges_blue = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
         check_edges_red = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
         check_nodes_blue = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
         check_nodes_red = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
-        
+        check_nodes_rem = Checkbox(value=True, indent=False, layout=Layout(width='30px')) # New
+
+        label_edges_blue = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
+        label_edges_red = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
+        label_nodes_blue = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
+        label_nodes_red = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
+        label_nodes_rem = HTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
+
+        # Native Visibility Linking (Faster/Smoother than Python updates)
         jslink((check_edges_blue, 'value'), (layer_edges_blue, 'visible'))
         jslink((check_edges_red, 'value'), (layer_edges_red, 'visible'))
         jslink((check_nodes_blue, 'value'), (layer_nodes_blue, 'visible'))
         jslink((check_nodes_red, 'value'), (layer_nodes_red, 'visible'))
-        
+        jslink((check_nodes_rem, 'value'), (layer_nodes_removed, 'visible'))
+
         row_1 = HBox([check_edges_blue, label_edges_blue], layout=Layout(align_items='center'))
         row_2 = HBox([check_edges_red, label_edges_red], layout=Layout(align_items='center'))
         row_3 = HBox([check_nodes_blue, label_nodes_blue], layout=Layout(align_items='center'))
         row_4 = HBox([check_nodes_red, label_nodes_red], layout=Layout(align_items='center'))
-        
+        row_5 = HBox([check_nodes_rem, label_nodes_rem], layout=Layout(align_items='center'))
+
         layer_control_box = VBox([
-            HTML(value="<b>Network Layers & Legend</b>"),
-            row_1, row_2, row_3, row_4
+            HTML(value="<b>Network Legend</b>"),
+            row_1, row_2, row_3, row_4, row_5
         ])
         
-        if len(G) > 5000:
-            layer_control_box.children += (HTML(value="<br><i><small>Performance Guard: Node layers disabled (>5k nodes)</small></i>"),)
-
         layer_control_box.layout.padding = '5px'
         layer_control_box.layout.background_color = 'white'
         layer_control_box.layout.border = '2px solid #ccc'
@@ -161,72 +167,9 @@ class NetworkVisualizer:
 
         m.add_control(WidgetControl(widget=layer_control_box, position='topright'))
 
-        # 4. Update Logic
-        def update_layers(strategy, fraction):
-            num_remove = int(len(G) * fraction)
-            G_temp = G.copy()
-            
-            remove_nodes = []
-            if strategy == "Random":
-                np.random.seed(42)
-                remove_nodes = np.random.choice(all_nodes, num_remove, replace=False)
-            elif strategy == "Targeted (Degree)":
-                remove_nodes = sorted_degree[:num_remove]
-            elif strategy == "Targeted (Betweenness)":
-                remove_nodes = sorted_betweenness[:num_remove]
-            elif strategy == "Targeted (Inverse Degree)":
-                remove_nodes = sorted_degree[-num_remove:] if num_remove > 0 else []
-            elif strategy == "Targeted (Inverse Betweenness)":
-                remove_nodes = sorted_betweenness[-num_remove:] if num_remove > 0 else []
-            elif strategy == "Targeted (Articulation)":
-                remove_nodes = sorted_articulation[:num_remove]
-            
-            G_temp.remove_nodes_from(remove_nodes)
-            
-            if len(G_temp) > 0:
-                largest_cc = max(nx.connected_components(G_temp), key=len)
-                lcc_set = set(largest_cc)
-            else:
-                lcc_set = set()
-
-            # GeoJSON construction
-            blue_lines = []
-            red_lines = []
-            
-            # Edges
-            for u, v in G.edges(): 
-                if u in G_temp and v in G_temp: 
-                    if u in geojson_pos and v in geojson_pos:
-                        coords = [geojson_pos[u], geojson_pos[v]]
-                        if u in lcc_set and v in lcc_set: # Strict definition: Edge is core if BOTH nodes are in LCC? Or if u in lcc (since comp connect)
-                             # If edge exists in G_temp, u and v are connected. If u is in lcc, v must be in lcc.
-                             # So check u in lcc_set is enough
-                            blue_lines.append(coords)
-                        else:
-                            red_lines.append(coords)
-            
-            layer_edges_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': blue_lines}, 'properties': {}}]} if blue_lines else {'type': 'FeatureCollection', 'features': []}
-            layer_edges_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': red_lines}, 'properties': {}}]} if red_lines else {'type': 'FeatureCollection', 'features': []}
-            
-            # Nodes
-            blue_pts = []
-            red_pts = []
-            
-            if not skip_nodes:
-                for n in G_temp.nodes():
-                    if n in geojson_pos:
-                        pt = geojson_pos[n]
-                        if n in lcc_set:
-                            blue_pts.append(pt)
-                        else:
-                            red_pts.append(pt)
-                        
-            layer_nodes_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': blue_pts}, 'properties': {}}]} if blue_pts else {'type': 'FeatureCollection', 'features': []}
-            layer_nodes_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': red_pts}, 'properties': {}}]} if red_pts else {'type': 'FeatureCollection', 'features': []}
-
-        # 5. Controls
+        # 4. Controls (Strategy/Slider)
         strat_dd = Dropdown(options=['Random', 'Targeted (Degree)', 'Targeted (Betweenness)', 'Targeted (Articulation)', 'Targeted (Inverse Degree)', 'Targeted (Inverse Betweenness)'], value='Random', description='Strategy:')
-        frac_sl = FloatSlider(min=0.0, max=0.5, step=0.01, value=0.0, description='Fraction:', layout=Layout(flex='3'))
+        frac_sl = FloatSlider(min=0.0, max=0.9, step=0.01, value=0.0, description='Fraction:', layout=Layout(flex='3'))
         
         btn_minus = Button(description='-', layout=Layout(width='40px'))
         btn_plus = Button(description='+', layout=Layout(width='40px'))
@@ -242,14 +185,86 @@ class NetworkVisualizer:
         btn_minus.on_click(on_minus)
         btn_plus.on_click(on_plus)
 
-        def on_change(change):
-            update_layers(strat_dd.value, frac_sl.value)
+        # 5. Update Logic
+        def update_layers(change=None):
+            # Arguments from widgets
+            strategy = strat_dd.value
+            fraction = frac_sl.value
             
-        strat_dd.observe(on_change, names='value')
-        frac_sl.observe(on_change, names='value')
+            # Note: Visibility is handled by jslink on the client side now.
+            # We always populate the data layers.
+
+            num_remove = int(len(G) * fraction)
+            G_temp = G.copy()
+            
+            remove_nodes = []
+            if strategy == "Random":
+                # Stable Random Sampling
+                rng = np.random.RandomState(42)
+                permuted_nodes = rng.permutation(all_nodes)
+                remove_nodes = permuted_nodes[:num_remove]
+            elif strategy == "Targeted (Degree)":
+                remove_nodes = sorted_degree[:num_remove]
+            elif strategy == "Targeted (Betweenness)":
+                remove_nodes = sorted_betweenness[:num_remove]
+            elif strategy == "Targeted (Inverse Degree)":
+                remove_nodes = sorted_degree[-num_remove:] if num_remove > 0 else []
+            elif strategy == "Targeted (Inverse Betweenness)":
+                remove_nodes = sorted_betweenness[-num_remove:] if num_remove > 0 else []
+            elif strategy == "Targeted (Articulation)":
+                remove_nodes = sorted_articulation[:num_remove]
+            
+            remove_set = set(remove_nodes)
+            G_temp.remove_nodes_from(remove_nodes)
+            
+            if len(G_temp) > 0:
+                largest_cc = max(nx.connected_components(G_temp), key=len)
+                lcc_set = set(largest_cc)
+            else:
+                lcc_set = set()
+
+            # GeoJSON construction
+            blue_lines, red_lines = [], []
+            blue_pts, red_pts, gray_pts = [], [], []
+
+            # 1. Edges
+            for u, v in G.edges(): 
+                if u in G_temp and v in G_temp: 
+                    if u in geojson_pos and v in geojson_pos:
+                        coords = [geojson_pos[u], geojson_pos[v]]
+                        if u in lcc_set and v in lcc_set:
+                            blue_lines.append(coords)
+                        else:
+                            red_lines.append(coords)
+            
+            # 2. Nodes (Active)
+            for n in G_temp.nodes():
+                if n in geojson_pos:
+                    pt = geojson_pos[n]
+                    if n in lcc_set:
+                        blue_pts.append(pt)
+                    else:
+                        red_pts.append(pt)
+            
+            # 3. Nodes (Removed)
+            for n in remove_set:
+                if n in geojson_pos:
+                    gray_pts.append(geojson_pos[n])
+
+            # Update Layers
+            layer_nodes_removed.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': gray_pts}, 'properties': {}}]} if gray_pts else {'type': 'FeatureCollection', 'features': []}
+            
+            layer_edges_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': blue_lines}, 'properties': {}}]} if blue_lines else {'type': 'FeatureCollection', 'features': []}
+            layer_edges_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': red_lines}, 'properties': {}}]} if red_lines else {'type': 'FeatureCollection', 'features': []}
+            
+            layer_nodes_red.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': red_pts}, 'properties': {}}]} if red_pts else {'type': 'FeatureCollection', 'features': []}
+            layer_nodes_blue.data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': blue_pts}, 'properties': {}}]} if blue_pts else {'type': 'FeatureCollection', 'features': []}
+            
+        strat_dd.observe(update_layers, names='value')
+        frac_sl.observe(update_layers, names='value')
         
         # Initial draw
-        update_layers('Random', 0.0)
+        update_layers()
         
         slider_row = HBox([frac_sl, btn_minus, btn_plus])
         display(VBox([strat_dd, slider_row]))
@@ -262,8 +277,15 @@ class NetworkVisualizer:
         """
         # Prepare data first
         plot_data = []
-        markers = ['o', 's', '^', 'D', 'x', 'v', '<', '>']
-        colors = ['green', 'red', 'orange', 'purple', 'blue', 'brown', 'cyan', 'magenta']
+        plot_data = []
+        # Extended palette for many lines (Tab20-like + others)
+        colors = [
+            '#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a',
+            '#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94',
+            '#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7', '#bcbd22', '#dbdb8d',
+            '#17becf', '#9edae5', 'black', 'navy'
+        ]
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', 'd', '|', '_']
         
         for i, (label, data) in enumerate(results_dict.items()):
             sorted_items = []
@@ -283,7 +305,8 @@ class NetworkVisualizer:
                 'x': features,
                 'y': values,
                 'marker': markers[i % len(markers)],
-                'color': colors[i % len(colors)]
+                'color': colors[i % len(colors)],
+                'linestyle': '-' if 'Switzerland' in label else '--' if 'Japan' in label else ':'
             })
             
         # Create Widgets
@@ -326,7 +349,7 @@ class NetworkVisualizer:
                                 plt.plot(
                                     x[1:], y[1:], 
                                     marker=item['marker'], 
-                                    linestyle='-', 
+                                    linestyle=item['linestyle'], 
                                     label='_nolegend_', 
                                     color=item['color'], 
                                     alpha=0.8
@@ -386,7 +409,7 @@ class NetworkVisualizer:
                                 plt.plot(
                                     x[1:], y[1:], 
                                     marker=item['marker'], 
-                                    linestyle='-', 
+                                    linestyle=item['linestyle'], 
                                     label=item['label'], 
                                     color=item['color'], 
                                     alpha=0.8
@@ -396,7 +419,7 @@ class NetworkVisualizer:
                             plt.plot(
                                 x, y, 
                                 marker=item['marker'], 
-                                linestyle='-', 
+                                linestyle=item['linestyle'], 
                                 label=item['label'], 
                                 color=item['color'], 
                                 alpha=0.8
@@ -578,3 +601,303 @@ class NetworkVisualizer:
         plt.tight_layout()
         plt.show()
 
+    def compare_interactive_maps(self, G1, G2, name1="Network 1", name2="Network 2"):
+        """
+        Creates a side-by-side interactive comparison of two networks under attack.
+        Shared controls for Strategy and Fraction.
+        """
+        # --- Helper to Setup Data for a Graph ---
+        def setup_graph_data(G):
+            geojson_pos = {}
+            lats, lons = [], []
+            for n, d in G.nodes(data=True):
+                if 'lat' in d and 'lon' in d:
+                    geojson_pos[n] = (d['lon'], d['lat'])
+                    lats.append(d['lat'])
+                    lons.append(d['lon'])
+            
+            if not lats: return None, None, None, None, None, None
+
+            center = (sum(lats)/len(lats), sum(lons)/len(lons))
+            
+            # Pre-calc strategies
+            d_cent = nx.degree_centrality(G)
+            
+            # Fast approx for betweenness if large
+            if len(G) > 5000:
+                b_cent = d_cent # Fallback
+            else:
+                b_cent = nx.betweenness_centrality(G)
+            
+            # Pre-calc Articulation Points (used for Articulation Strategy)
+            # Note: This can be slow for very massive graphs, but usually O(N+E)
+            try:
+                articulation_points = set(nx.articulation_points(G))
+                # Sort articulation points by degree centrality (descending)
+                ap_list = sorted([n for n in articulation_points], key=d_cent.get, reverse=True)
+                # Add other nodes, also sorted by degree, after articulation points
+                others = sorted([n for n in d_cent if n not in articulation_points], key=d_cent.get, reverse=True)
+                sorted_articulation = ap_list + others
+            except Exception: # Catch potential errors if graph is too simple or specific
+                # Fallback to degree centrality if articulation points calculation fails
+                sorted_articulation = sorted(d_cent, key=d_cent.get, reverse=True)
+
+
+            sorted_deg = sorted(d_cent, key=d_cent.get, reverse=True)
+            sorted_bet = sorted(b_cent, key=b_cent.get, reverse=True)
+            
+            all_nodes = list(G.nodes())
+            
+            return geojson_pos, center, sorted_deg, sorted_bet, sorted_articulation, all_nodes
+
+        # Setup Data
+        pos1, center1, deg1, bet1, art1, nodes1 = setup_graph_data(G1)
+        pos2, center2, deg2, bet2, art2, nodes2 = setup_graph_data(G2)
+        
+        if not pos1 or not pos2:
+            print("Error: Missing coordinates.")
+            return None
+
+        # --- Helper to Create Layers ---
+        def create_layers(m, color_core, color_iso):
+            l_edges_core = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, 
+                                  style={'color': color_core, 'weight': 1, 'opacity': 0.6}, name='Edges (Core)')
+            l_edges_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, 
+                                 style={'color': color_iso, 'weight': 1, 'opacity': 0.6}, name='Edges (Iso)')
+            l_nodes_core = GeoJSON(data={'type': 'FeatureCollection', 'features': []}, 
+                                  point_style={'radius': 3, 'color': color_core, 'fillColor': color_core, 'fillOpacity': 0.8}, name='Nodes (Core)')
+            l_nodes_iso = GeoJSON(data={'type': 'FeatureCollection', 'features': []},
+                                 point_style={'radius': 4, 'color': color_iso, 'fillColor': color_iso, 'fillOpacity': 0.8}, name='Nodes (Iso)')
+            l_nodes_removed = GeoJSON(data={'type': 'FeatureCollection', 'features': []},
+                                     point_style={'radius': 2, 'color': '#999999', 'fillColor': '#999999', 'fillOpacity': 0.3}, name='Nodes (Removed)')
+            
+            # Order: Edges first, then Removed nodes (background), then Active nodes (foreground)
+            # Fix: Add layers from Bottom (Background) to Top (Foreground).
+            # Last added/updated = Top.
+            m.add_layer(l_nodes_removed) 
+            m.add_layer(l_edges_core)
+            m.add_layer(l_edges_iso)
+            m.add_layer(l_nodes_iso)
+            m.add_layer(l_nodes_core)
+            
+            return l_edges_core, l_edges_iso, l_nodes_core, l_nodes_iso, l_nodes_removed
+
+        # Initialize Maps
+        # Zoom Customization based on User Feedback: Japan needs to be zoomed out more.
+        # Default zoom was 7. Request: "minus 2 times" -> Zoom 5.
+        zoom1 = 7 # Switzerland likely fine
+        zoom2 = 5 # Japan (Network 2) zoomed out
+        
+        m1 = Map(center=center1, zoom=zoom1, basemap=basemaps.CartoDB.Positron)
+        m2 = Map(center=center2, zoom=zoom2, basemap=basemaps.CartoDB.Positron)
+        
+        m1.layout.height = '600px'
+        m2.layout.height = '600px'
+        m1.layout.width = '100%'
+        m2.layout.width = '100%'
+
+        # Create Layers
+        layers1 = create_layers(m1, 'blue', 'red')
+        layers2 = create_layers(m2, 'blue', 'red')
+
+        # --- Update Logic ---
+        def get_geo_updates(G, pos, strategy_type, fraction, sorted_degree, sorted_betweenness, sorted_articulation, all_nodes_list):
+            num_remove = int(len(G) * fraction)
+            remove_nodes = []
+            
+            if strategy_type == "Random":
+                # Deterministic random for stability in UI
+                rng = np.random.RandomState(42) 
+                # Use permutation to ensure subset stability (if frac 0.1 -> 0.2, the 0.1 nodes are still removed)
+                permuted_nodes = rng.permutation(all_nodes_list)
+                remove_nodes = permuted_nodes[:num_remove]
+            elif strategy_type == "Targeted (Degree)":
+                remove_nodes = sorted_degree[:num_remove]
+            elif strategy_type == "Targeted (Betweenness)":
+                remove_nodes = sorted_betweenness[:num_remove]
+            elif strategy_type == "Inverse Targeted (Degree)":
+                 remove_nodes = sorted_degree[-num_remove:] if num_remove > 0 else []
+            elif strategy_type == "Inverse Targeted (Betweenness)":
+                 remove_nodes = sorted_betweenness[-num_remove:] if num_remove > 0 else []
+            elif strategy_type == "Targeted (Articulation)":
+                remove_nodes = sorted_articulation[:num_remove]
+            
+            remove_set = set(remove_nodes)
+            G_temp = G.copy()
+            G_temp.remove_nodes_from(remove_nodes)
+            
+            if len(G_temp) > 0:
+                largest_cc = max(nx.connected_components(G_temp), key=len)
+                lcc_set = set(largest_cc)
+            else:
+                lcc_set = set()
+                
+            # Build Features
+            core_lines, iso_lines = [], []
+            core_pts, iso_pts, removed_pts = [], [], []
+            
+            for u, v in G.edges():
+                if u in G_temp and v in G_temp:
+                    if u in pos and v in pos:
+                        coords = [pos[u], pos[v]]
+                        if u in lcc_set and v in lcc_set:
+                            core_lines.append(coords)
+                        else:
+                            iso_lines.append(coords)
+                            
+            # Optimization: Skip nodes if too many (>5k) to keep slider smooth?
+            # User wants visual, so let's try to keep them.
+            # if len(G_temp) < 10000: # Removed limit per user request
+            
+            # Add Active Nodes
+            for n in G_temp.nodes():
+                if n in pos:
+                    pt = pos[n]
+                    if n in lcc_set:
+                        core_pts.append(pt)
+                    else:
+                        iso_pts.append(pt)
+            
+            # Add Removed Nodes (Ghosts)
+            for n in remove_set:
+                if n in pos:
+                    removed_pts.append(pos[n])
+                            
+            return core_lines, iso_lines, core_pts, iso_pts, removed_pts
+
+        def update_both(change=None):
+            strat = strat_dd.value
+            frac = frac_sl.value
+            show_removed = show_removed_chk.value
+            show_nodes = show_nodes_chk.value
+            
+            # Map 1 Update
+            c1, i1, cp1, ip1, rem1 = get_geo_updates(G1, pos1, strat, frac, deg1, bet1, art1, nodes1)
+            
+            # Critical: Update layers in Z-order (Bottom -> Top). Last updated = Top.
+            # 1. Removed (Gray) - Bottom
+            # User Request: If "Show Nodes" is unchecked, hide ALL nodes (including gray ones).
+            rem1_data = rem1 if (show_removed and show_nodes) else []
+            layers1[4].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': rem1_data}, 'properties': {}}]} if rem1_data else {'type': 'FeatureCollection', 'features': []}
+            
+            # 2. Edges
+            layers1[0].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': c1}, 'properties': {}}]} if c1 else {'type': 'FeatureCollection', 'features': []}
+            layers1[1].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': i1}, 'properties': {}}]} if i1 else {'type': 'FeatureCollection', 'features': []}
+            
+            # 3. Iso (Red) - Middle
+            ip1_data = ip1 if show_nodes else []
+            layers1[3].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': ip1_data}, 'properties': {}}]} if ip1_data else {'type': 'FeatureCollection', 'features': []}
+            
+            # 4. Core (Blue) - Top (Last Updated)
+            cp1_data = cp1 if show_nodes else []
+            layers1[2].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': cp1_data}, 'properties': {}}]} if cp1_data else {'type': 'FeatureCollection', 'features': []}
+            
+            # Map 2 Update
+            c2, i2, cp2, ip2, rem2 = get_geo_updates(G2, pos2, strat, frac, deg2, bet2, art2, nodes2)
+            
+            # 1. Removed (Gray)
+            rem2_data = rem2 if (show_removed and show_nodes) else []
+            layers2[4].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': rem2_data}, 'properties': {}}]} if rem2_data else {'type': 'FeatureCollection', 'features': []}
+
+            # 2. Edges
+            layers2[0].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': c2}, 'properties': {}}]} if c2 else {'type': 'FeatureCollection', 'features': []}
+            layers2[1].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiLineString', 'coordinates': i2}, 'properties': {}}]} if i2 else {'type': 'FeatureCollection', 'features': []}
+            
+            # 3. Iso (Red)
+            ip2_data = ip2 if show_nodes else []
+            layers2[3].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': ip2_data}, 'properties': {}}]} if ip2_data else {'type': 'FeatureCollection', 'features': []}
+            
+            # 4. Core (Blue)
+            cp2_data = cp2 if show_nodes else []
+            layers2[2].data = {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'geometry': {'type': 'MultiPoint', 'coordinates': cp2_data}, 'properties': {}}]} if cp2_data else {'type': 'FeatureCollection', 'features': []}
+
+        # Controls
+        # Full list of strategies
+        strategies = [
+            'Random', 
+            'Targeted (Degree)', 
+            'Targeted (Betweenness)', 
+            'Inverse Targeted (Degree)', 
+            'Inverse Targeted (Betweenness)', 
+            'Targeted (Articulation)'
+        ]
+        
+        strat_dd = Dropdown(
+            options=strategies, 
+            value='Random', 
+            description='Attack Strategy:', 
+            style={'description_width': 'initial'},
+            layout=Layout(width='auto')
+        )
+        
+        # Slider with 0.01 steps and full width (relative to container, we use 90% or flex)
+        frac_sl = FloatSlider(
+            min=0.0, max=0.9, step=0.01, value=0.0, 
+            description='Fraction Removed:', 
+            layout=Layout(width='85%'), # Wider for 2nd row
+            style={'description_width': 'initial'},
+            readout_format='.2f'
+        )
+        
+        # Buttons
+        btn_minus = Button(description='-', layout=Layout(width='40px'))
+        btn_plus = Button(description='+', layout=Layout(width='40px'))
+        
+        # Checkboxes
+        show_nodes_chk = Checkbox(
+            value=True,
+            description='Show Nodes',
+            indent=False,
+            layout=Layout(width='auto', margin='0px 10px 0px 0px')
+        )
+        
+        show_removed_chk = Checkbox(
+            value=True,
+            description='Show Removed Nodes',
+            indent=False,
+            layout=Layout(width='auto')
+        )
+        
+        def on_minus(b):
+            # step=0.01 logic
+            new_val = round(max(frac_sl.min, frac_sl.value - 0.01), 2)
+            frac_sl.value = new_val
+            
+        def on_plus(b):
+            new_val = round(min(frac_sl.max, frac_sl.value + 0.01), 2)
+            frac_sl.value = new_val
+            
+        btn_minus.on_click(on_minus)
+        btn_plus.on_click(on_plus)
+        
+        strat_dd.observe(update_both, names='value')
+        frac_sl.observe(update_both, names='value')
+        show_removed_chk.observe(update_both, names='value')
+        show_nodes_chk.observe(update_both, names='value')
+        
+        # Initial call
+        update_both()
+        
+        # Layout
+        # Row 1: Strategy + Checkboxes
+        # Group checkboxes
+        chk_box = HBox([show_nodes_chk, show_removed_chk], layout=Layout(align_items='center'))
+        
+        row1 = HBox([strat_dd, chk_box], 
+                   layout=Layout(justify_content='space-between', width='100%', padding='5px'))
+        
+        # Row 2: Slider + Buttons (Full width)
+        row2 = HBox([frac_sl, btn_minus, btn_plus], 
+                   layout=Layout(width='100%', padding='5px', align_items='center'))
+        
+        controls = VBox([row1, row2], layout=Layout(width='100%', padding='10px'))
+        
+        label1 = HTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name1}</div>")
+        label2 = HTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name2}</div>")
+        
+        map_box = HBox([
+            VBox([label1, m1], layout=Layout(width='50%', padding='5px')),
+            VBox([label2, m2], layout=Layout(width='50%', padding='5px'))
+        ])
+        
+        return VBox([controls, map_box])
