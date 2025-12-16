@@ -464,11 +464,39 @@ class NetworkVisualizer:
             cb.observe(update_plot, names='value')
             
         # Layout
-        # Create a legend control box
-        cb_list = list(checkboxes.values())
-        # Arrange checkboxes in rows of 3 to avoid super long vertical lists if many lines
-        rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
-        controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
+        # Check if we can group by Strategy (Pattern: "Country - Strategy")
+        grouped_by_strategy = {}
+        strategies_order = []
+        is_grouped = False
+
+        for item in plot_data:
+            label = item['label']
+            if " - " in label:
+                parts = label.split(" - ", 1)
+                if len(parts) == 2:
+                    country, strategy = parts
+                    if strategy not in grouped_by_strategy:
+                        grouped_by_strategy[strategy] = []
+                        strategies_order.append(strategy)
+                    grouped_by_strategy[strategy].append(checkboxes[label])
+                    is_grouped = True
+        
+        if is_grouped:
+            # Create Rows by Strategy
+            rows = []
+            for strategy in strategies_order:
+                # Add Strategy Label if desired, or just list the checkboxes
+                # Since the checkbox label is "Switzerland - Random", it might be repetitive.
+                # But kept simple for now: Just a row of checkboxes for that strategy
+                row_content = grouped_by_strategy[strategy]
+                rows.append(HBox(row_content, layout=Layout(margin='5px 0')))
+            
+            controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
+        else:
+            # Fallback: Arrange checkboxes in rows of 3
+            cb_list = list(checkboxes.values())
+            rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
+            controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
         
         # Wrap in Accordion to create a hidden menu
         menu = Accordion(children=[controls_content])
@@ -834,7 +862,7 @@ class NetworkVisualizer:
         frac_sl = FloatSlider(
             min=0.0, max=0.9, step=0.01, value=0.0, 
             description='Fraction Removed:', 
-            layout=Layout(width='85%'), # Wider for 2nd row
+            layout=Layout(width='85%'), 
             style={'description_width': 'initial'},
             readout_format='.2f'
         )
@@ -843,23 +871,8 @@ class NetworkVisualizer:
         btn_minus = Button(description='-', layout=Layout(width='40px'))
         btn_plus = Button(description='+', layout=Layout(width='40px'))
         
-        # Checkboxes
-        show_nodes_chk = Checkbox(
-            value=True,
-            description='Show Nodes',
-            indent=False,
-            layout=Layout(width='auto', margin='0px 10px 0px 0px')
-        )
-        
-        show_removed_chk = Checkbox(
-            value=True,
-            description='Show Removed Nodes',
-            indent=False,
-            layout=Layout(width='auto')
-        )
-        
+        # Helper buttons logic
         def on_minus(b):
-            # step=0.01 logic
             new_val = round(max(frac_sl.min, frac_sl.value - 0.01), 2)
             frac_sl.value = new_val
             
@@ -870,23 +883,115 @@ class NetworkVisualizer:
         btn_minus.on_click(on_minus)
         btn_plus.on_click(on_plus)
         
+        # Legend Icon Helper (Local)
+        def legend_icon(color, shape='line'):
+            if shape == 'line':
+                # Line icon: wider rectangle
+                return f'<i style="background: {color}; width: 25px; height: 3px; display: inline-block; vertical-align: middle; margin-right: 5px;"></i>'
+            else:
+                # Circle icon
+                return f'<i style="background: {color}; width: 10px; height: 10px; display: inline-block; border-radius: 50%; vertical-align: middle; margin-right: 5px;"></i>'
+
+        # Expanded Legend Controls (Checkboxes + Icons)
+        # We need 5 controls: Edges (Core/Iso), Nodes (Core/Iso), Removed
+        chk_edges_core = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        chk_edges_iso = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        chk_nodes_core = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        chk_nodes_iso = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+        chk_nodes_rem = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
+
+        # Labels with Icons
+        lbl_edges_core = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
+        lbl_edges_iso = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
+        lbl_nodes_core = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
+        lbl_nodes_iso = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
+        lbl_nodes_rem = HTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
+
+        # Link to Layers (Both Maps)
+        # layers1 = [l_edges_core, l_edges_iso, l_nodes_core, l_nodes_iso, l_nodes_removed]
+        # Map 1
+        jslink((chk_edges_core, 'value'), (layers1[0], 'visible'))
+        jslink((chk_edges_iso, 'value'), (layers1[1], 'visible'))
+        jslink((chk_nodes_core, 'value'), (layers1[2], 'visible'))
+        jslink((chk_nodes_iso, 'value'), (layers1[3], 'visible'))
+        jslink((chk_nodes_rem, 'value'), (layers1[4], 'visible'))
+        
+        # Map 2
+        jslink((chk_edges_core, 'value'), (layers2[0], 'visible'))
+        jslink((chk_edges_iso, 'value'), (layers2[1], 'visible'))
+        jslink((chk_nodes_core, 'value'), (layers2[2], 'visible'))
+        jslink((chk_nodes_iso, 'value'), (layers2[3], 'visible'))
+        jslink((chk_nodes_rem, 'value'), (layers2[4], 'visible'))
+
+        # Build Legend Widget
+        legend_rows = [
+            HBox([chk_edges_core, lbl_edges_core], layout=Layout(align_items='center')),
+            HBox([chk_edges_iso, lbl_edges_iso], layout=Layout(align_items='center')),
+            HBox([chk_nodes_core, lbl_nodes_core], layout=Layout(align_items='center')),
+            HBox([chk_nodes_iso, lbl_nodes_iso], layout=Layout(align_items='center')),
+            HBox([chk_nodes_rem, lbl_nodes_rem], layout=Layout(align_items='center'))
+        ]
+        
+        legend_box = VBox([
+            HTML("<b>Network Legend</b>"),
+            *legend_rows
+        ], layout=Layout(
+            background='white', 
+            padding='5px', 
+            border='1px solid #ccc', 
+            border_radius='5px'
+        ))
+        
+        # Add to Map 2 (Right) - Top Right
+        m2.add_control(WidgetControl(widget=legend_box, position='topright'))
+
+        # Required for update logic compatibility
+        # The update_both function references show_removed_chk and show_nodes_chk values.
+        # We need to ensure it doesn't break. 
+        # But wait, we are removing those specific checkboxes.
+        # We must update update_both to simply assume we want to update coordinates regardless of visibility,
+        # OR aliases them.
+        # However, layer visibility is now handled by jslink directly on the layer objects!
+        # So update_both just needs to update the *data* in the layers.
+        # BUT update_both (lines 796+) checks `show_removed` and `show_nodes` to optionally send empty data [].
+        # If we remove the Python-side filtering in update_both and rely on JS visibility, it is cleaner/faster.
+        # Strategy: Define dummy variables for update_both to check (always True) OR redefine update_both.
+        # Since update_both is already defined above, we can't easily redefine it here without replacing that block too.
+        # Hack fix: Define proxies that always return True?
+        # Better: Since layers have .visible prop controlled by us now, we can just feed data always.
+        # But `update_both` logic explicitly sets empty features if show=False. We need to override this behavior.
+        # Actually, `update_both` reads from `show_removed_chk.value`.
+        # We can alias `show_removed_chk` to `chk_nodes_rem` (so it follows user input)
+        # And `show_nodes_chk` to `chk_nodes_core` (assuming if core is on, we calculate positions).
+        # Or better, just make mock objects or aliases.
+        
+        show_removed_chk = chk_nodes_rem
+        # For 'show_nodes', we have split controls (Core/Iso). 
+        # If either is on, we probably want to compute data.
+        # Let's just point show_nodes_chk to a dummy object with value=True so update_both always sends data,
+        # and we let the Layer.visible property handle the actual hiding.
+        class DummyCheck:
+            value = True
+        show_nodes_chk = DummyCheck() 
+        # Update: Actually if update_both sends empty data, the layer is empty regardless of visibility.
+        # If we always send data, JS visibility toggles it. This is preferred.
+        # So setting show_nodes_chk.value = True always is the correct move for JS-controlled visibility.
+        
         strat_dd.observe(update_both, names='value')
         frac_sl.observe(update_both, names='value')
-        show_removed_chk.observe(update_both, names='value')
-        show_nodes_chk.observe(update_both, names='value')
+        # We don't need to observe visibility toggles for data updates anymore if we always send data.
+        # But removed nodes calculation involves re-filtering. 
+        # If we always calculate, it's fine.
         
         # Initial call
         update_both()
         
-        # Layout
-        # Row 1: Strategy + Checkboxes
-        # Group checkboxes
-        chk_box = HBox([show_nodes_chk, show_removed_chk], layout=Layout(align_items='center'))
+        # Main Layout
+        # Row 1: Strategy
+        row1 = HBox([strat_dd], 
+                   layout=Layout(justify_content='flex-start', width='100%', padding='5px'))
         
-        row1 = HBox([strat_dd, chk_box], 
-                   layout=Layout(justify_content='space-between', width='100%', padding='5px'))
-        
-        # Row 2: Slider + Buttons (Full width)
+        # Row 2: Slider + Buttons
         row2 = HBox([frac_sl, btn_minus, btn_plus], 
                    layout=Layout(width='100%', padding='5px', align_items='center'))
         
