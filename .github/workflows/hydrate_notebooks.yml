@@ -1,0 +1,51 @@
+name: Hydrate Notebooks with Output
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.ipynb'
+      - 'src/**'
+      - 'requirements.txt'
+
+jobs:
+  run-notebooks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install jupyter nbconvert ipykernel
+
+      - name: Execute Japan Analysis
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace Japan_Analysis.ipynb
+
+      - name: Execute Switzerland Analysis
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace Switzerland_Analysis.ipynb
+
+      - name: Execute Comparison Analysis
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace Comparison_Analysis.ipynb
+
+      - name: Commit and Push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add *.ipynb
+          # Only commit if there are changes
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Hydrate notebooks with outputs [skip ci]" && git push)
