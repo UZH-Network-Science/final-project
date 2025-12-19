@@ -332,3 +332,27 @@ def create_robustness_style_map(G, title="Rail Network (Core vs Isolated)"):
     
     folium.LayerControl().add_to(m)
     return m
+
+def create_static_map(G, title="Static Network Map"):
+    """
+    Creates a static Matplotlib map for CI/GitHub rendering.
+    Uses 'lon'/'lat' node attributes for positioning.
+    """
+    plt.figure(figsize=(10, 10))
+    
+    # Extract positions
+    pos = {n: (d['lon'], d['lat']) for n, d in G.nodes(data=True) if 'lon' in d and 'lat' in d}
+    if not pos:
+        print("No geographic data found for static map.")
+        return
+
+    # Draw Edges
+    nx.draw_networkx_edges(G, pos, width=0.5, edge_color='#6c757d', alpha=0.5)
+    
+    # Draw Nodes
+    nx.draw_networkx_nodes(G, pos, node_size=10, node_color='#1f77b4', alpha=0.8)
+    
+    plt.title(title)
+    plt.axis('off')
+    plt.gca().set_aspect('equal')
+    plt.show()
