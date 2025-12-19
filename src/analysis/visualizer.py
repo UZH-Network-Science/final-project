@@ -639,8 +639,8 @@ class NetworkVisualizer:
         No interactive attack simulation controls.
         """
         if self.is_ci:
-            print("Skipping component map in CI.")
-            return None
+            print("NetworkVisualizer: CI environment detected. Generating static component map for GitHub compatibility.")
+            return self.plot_map(G, title="Connected Components (Static CI Fallback)")
 
         # Pre-process coordinates
         geojson_pos = {}
@@ -761,7 +761,10 @@ class NetworkVisualizer:
         Shared controls for Strategy and Fraction.
         """
         if self.is_ci:
-            print("Skipping comparison map in CI.")
+            print(f"NetworkVisualizer: CI environment detected. Generating static comparison maps for {name1} and {name2}.")
+            from IPython.display import display
+            display(self.plot_map(G1, title=f"{name1} (Static CI Fallback)"))
+            display(self.plot_map(G2, title=f"{name2} (Static CI Fallback)"))
             return None
 
         # --- Helper to Setup Data for a Graph ---
