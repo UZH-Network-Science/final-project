@@ -223,7 +223,7 @@ class NetworkAnalyzer:
             # Disable tqdm in CI to prevent nbclient display_id errors
             is_ci = os.environ.get('CI', 'false').lower() == 'true'
             is_gha = os.environ.get('GITHUB_ACTIONS', 'false').lower() == 'true'
-            print(f"DEBUG: CI={is_ci}, GITHUB_ACTIONS={is_gha}, env_CI={os.environ.get('CI')}, env_GHA={os.environ.get('GITHUB_ACTIONS')}", flush=True)
+            print(f"DEBUG [simulate_attack]: CI={is_ci}, GITHUB_ACTIONS={is_gha}, env_CI={os.environ.get('CI')}, env_GHA={os.environ.get('GITHUB_ACTIONS')}", flush=True)
             disable_tqdm = is_ci or is_gha
             
             for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=desc, disable=disable_tqdm):
