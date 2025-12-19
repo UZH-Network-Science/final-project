@@ -45,6 +45,14 @@ jobs:
         run: |
           jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Comparison_Analysis.ipynb
 
+      - name: Execute Japan Construction Story
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Japan_Construction_Story.ipynb
+
+      - name: Execute Switzerland Construction Story
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Switzerland_Construction_Story.ipynb
+
       - name: Commit and Push changes
         run: |
           git config user.name "github-actions[bot]"
