@@ -218,7 +218,10 @@ class NetworkAnalyzer:
             # Aggregator
             temp_results = {str(f): {m: [] for m in metric_names} for f in fractions}
             
-            for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=desc):
+            # Disable tqdm in CI to prevent nbclient display_id errors
+            disable_tqdm = os.environ.get('CI', 'false').lower() == 'true'
+            
+            for future in tqdm(as_completed(futures_map), total=len(futures_map), desc=desc, disable=disable_tqdm):
                 f = futures_map[future]
                 try:
                     res_dict = future.result()
