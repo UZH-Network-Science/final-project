@@ -20,15 +20,32 @@ class NetworkVisualizer:
         """
         Generates a static Folium map.
         """
-        if self.is_ci:
-            print("Skipping static map generation in CI.")
-            return folium.Map()
+
 
         lats = [d['lat'] for n, d in G.nodes(data=True) if 'lat' in d]
         lons = [d['lon'] for n, d in G.nodes(data=True) if 'lon' in d]
         
         if not lats:
             return folium.Map()
+
+        if self.is_ci:
+            # Matplotlib Fallback for CI (Guaranteed GitHub Rendering)
+            print(f"Generating static Matplotlib map for: {title}")
+            plt.figure(figsize=(10, 10))
+            
+            # Extract positions
+            pos = {n: (d['lon'], d['lat']) for n, d in G.nodes(data=True) if 'lon' in d and 'lat' in d}
+            
+            # Draw
+            nx.draw_networkx_edges(G, pos, width=0.5, edge_color=edge_color, alpha=0.5)
+            nx.draw_networkx_nodes(G, pos, node_size=10, node_color=node_color, alpha=0.8)
+            
+            plt.title(title)
+            plt.axis('off') # Hide axes for cleaner look
+            # Aspect ratio 'equal' to look like a map
+            plt.gca().set_aspect('equal')
+            plt.show()
+            return None # Return None as we displayed the plot
 
         center = [sum(lats)/len(lats), sum(lons)/len(lons)]
         m = folium.Map(location=center, zoom_start=8, tiles='CartoDB Positron')
