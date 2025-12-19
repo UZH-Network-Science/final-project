@@ -29,18 +29,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install jupyter nbconvert ipykernel
+          python -m ipykernel install --user --name venv_final_project
 
       - name: Execute Japan Analysis
         run: |
-          jupyter nbconvert --to notebook --execute --inplace Japan_Analysis.ipynb
+          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Japan_Analysis.ipynb
 
       - name: Execute Switzerland Analysis
         run: |
-          jupyter nbconvert --to notebook --execute --inplace Switzerland_Analysis.ipynb
+          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Switzerland_Analysis.ipynb
 
       - name: Execute Comparison Analysis
         run: |
-          jupyter nbconvert --to notebook --execute --inplace Comparison_Analysis.ipynb
+          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Comparison_Analysis.ipynb
 
       - name: Commit and Push changes
         run: |
