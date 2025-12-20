@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/configure-cicd-workflow
     paths:
       - '**.ipynb'
       - 'src/**'
@@ -13,6 +14,15 @@ on:
 jobs:
   run-notebooks:
     runs-on: ubuntu-latest
+    env:
+      CI: true
+      # Define the list of notebooks to process here (space-separated)
+      NOTEBOOKS_LIST: >-
+        Japan_Analysis.ipynb
+        Switzerland_Analysis.ipynb
+        Comparison_Analysis.ipynb
+        Graph_Construction_Walkthrough/Japan_Construction_Story.ipynb
+        Graph_Construction_Walkthrough/Switzerland_Construction_Story.ipynb
     permissions:
       contents: write
       
@@ -25,39 +35,38 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.14.1'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install jupyter nbconvert ipykernel
+          make install
           python -m ipykernel install --user --name venv_final_project
 
-      - name: Execute Japan Analysis
+      - name: Execute Notebooks
         run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Japan_Analysis.ipynb
+          # Convert space-separated string to array for iteration
+          for notebook in $NOTEBOOKS_LIST; do
+            echo "----------------------------------------------------------------"
+            echo "Executing $notebook..."
+            echo "----------------------------------------------------------------"
+            jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 "$notebook"
+          done
 
-      - name: Execute Switzerland Analysis
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Switzerland_Analysis.ipynb
-
-      - name: Execute Comparison Analysis
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Comparison_Analysis.ipynb
-
-      - name: Execute Japan Construction Story
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Japan_Construction_Story.ipynb
-
-      - name: Execute Switzerland Construction Story
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Switzerland_Construction_Story.ipynb
-
-      - name: Commit and Push changes
+      - name: Publish Verification Results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add *.ipynb
-          # Only commit if there are changes
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Hydrate notebooks with outputs [skip ci]" && git push)
+          
+          # Add the executed notebooks
+          for notebook in $NOTEBOOKS_LIST; do
+            git add "$notebook"
+          done
+          
+          # Commit the changes (if any)
+          # We use a specific message indicating this is a generated build
+          git diff --quiet && git diff --staged --quiet || git commit --no-verify -m "Build: Hydrate notebooks [skip ci]"
+          
+          # Force push to the 'rendered' branch.
+          # HEAD:rendered tells git to push the current commit to the remote 'rendered' branch.
+          # -f overwrites it, ensuring it always matches the latest build.
+          git push -f origin HEAD:rendered

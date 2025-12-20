@@ -8,19 +8,44 @@ from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl
 from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink, Output, Accordion
 from IPython.display import display, clear_output
 
+import os
+
 class NetworkVisualizer:
     def __init__(self):
-        pass
+        self.is_ci = os.environ.get('CI', 'false').lower() == 'true' or os.environ.get('GITHUB_ACTIONS', 'false').lower() == 'true'
+        if self.is_ci:
+            print("NetworkVisualizer: CI environment detected. Interactive plots will be skipped to prevent build failures.")
 
     def plot_map(self, G, node_color='#1f77b4', edge_color='#6c757d', title="Network Map"):
         """
         Generates a static Folium map.
         """
+
+
         lats = [d['lat'] for n, d in G.nodes(data=True) if 'lat' in d]
         lons = [d['lon'] for n, d in G.nodes(data=True) if 'lon' in d]
         
         if not lats:
             return folium.Map()
+
+        if self.is_ci:
+            # Matplotlib Fallback for CI (Guaranteed GitHub Rendering)
+            print(f"Generating static Matplotlib map for: {title}")
+            plt.figure(figsize=(10, 10))
+            
+            # Extract positions
+            pos = {n: (d['lon'], d['lat']) for n, d in G.nodes(data=True) if 'lon' in d and 'lat' in d}
+            
+            # Draw
+            nx.draw_networkx_edges(G, pos, width=0.5, edge_color=edge_color, alpha=0.5)
+            nx.draw_networkx_nodes(G, pos, node_size=10, node_color=node_color, alpha=0.8)
+            
+            plt.title(title)
+            plt.axis('off') # Hide axes for cleaner look
+            # Aspect ratio 'equal' to look like a map
+            plt.gca().set_aspect('equal')
+            plt.show()
+            return None # Return None as we displayed the plot
 
         center = [sum(lats)/len(lats), sum(lons)/len(lons)]
         m = folium.Map(location=center, zoom_start=8, tiles='CartoDB Positron')
@@ -56,6 +81,10 @@ class NetworkVisualizer:
         Includes Visual Layer Control (Checkboxes) and Finite-Step Slider.
         Updated to match Comparison_Analysis features (Ghost nodes, Stable Random, correct Z-order).
         """
+        if self.is_ci:
+            print("NetworkVisualizer: CI environment detected. Generating static map for GitHub compatibility.")
+            return self.plot_map(G, title="Initial State (CI Fallback)")
+
         # Pre-process coordinates for speed
         geojson_pos = {}
         lats, lons = [], []
@@ -275,6 +304,69 @@ class NetworkVisualizer:
         Plots multiple curves from a dictionary of results with interactive controls.
         results_dict: { 'Label': {'0.0': 1.0, '0.1': 0.8...} }
         """
+        if self.is_ci:
+            print("NetworkVisualizer: CI environment detected. Generating static plot for GitHub compatibility.")
+            # Static Plot Logic for CI
+            plt.figure(figsize=(12, 6))
+            
+            # Extended palette for many lines
+            colors = [
+                '#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a',
+                '#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94',
+                '#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7', '#bcbd22', '#dbdb8d',
+                '#17becf', '#9edae5', 'black', 'navy'
+            ]
+            markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', 'd', '|', '_']
+
+            for i, (label, data) in enumerate(results_dict.items()):
+                sorted_items = []
+                for k, v in data.items():
+                    try:
+                        sorted_items.append((float(k), v))
+                    except ValueError:
+                        continue
+                sorted_items.sort()
+                
+                if not sorted_items:
+                    continue
+                    
+                x, y = zip(*sorted_items)
+                x = np.array(x)
+                y = np.array(y)
+                
+                color = colors[i % len(colors)]
+                marker = markers[i % len(markers)]
+                linestyle = '-' if 'Switzerland' in label else '--' if 'Japan' in label else ':'
+                
+                # Plot
+                if len(x) > 0 and x[0] <= 1e-9:
+                    # Point at 0
+                    plt.plot([x[0]], [y[0]], marker=marker, linestyle='None', label='_nolegend_', color=color, alpha=0.8, clip_on=False)
+                    # Line rest
+                    if len(x) > 1:
+                        plt.plot(x[1:], y[1:], marker=marker, linestyle=linestyle, label=label, color=color, alpha=0.8)
+                        # Connection line (dotted gray) to show continuity without misleading visual
+                        plt.plot(x[:2], y[:2], linestyle=':', color='gray', alpha=0.3)
+                else:
+                    plt.plot(x, y, marker=marker, linestyle=linestyle, label=label, color=color, alpha=0.8)
+
+            if log_x:
+                plt.xlabel("Fraction of Nodes Removed (Log Scale)")
+                plt.xscale('symlog', linthresh=0.05, linscale=0.05)
+                plt.xlim(left=0.0)
+                plt.xticks([0, 0.1, 1.0], ['0', '$10^{-1}$', '$10^{0}$'])
+                plt.minorticks_off()
+            else:
+                plt.xlabel("Fraction of Nodes Removed")
+                
+            plt.ylabel(ylabel)
+            plt.title(title)
+            plt.grid(True, axis='y', linestyle='--', alpha=0.3)
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            plt.show()
+            return
+
         # Prepare data first
         plot_data = []
         plot_data = []
@@ -563,6 +655,10 @@ class NetworkVisualizer:
         Creates a map showing the Largest Connected Component (Blue) and Isolated Components (Red).
         No interactive attack simulation controls.
         """
+        if self.is_ci:
+            print("NetworkVisualizer: CI environment detected. Generating static component map for GitHub compatibility.")
+            return self.plot_map(G, title="Connected Components (Static CI Fallback)")
+
         # Pre-process coordinates
         geojson_pos = {}
         lats, lons = [], []
@@ -681,6 +777,13 @@ class NetworkVisualizer:
         Creates a side-by-side interactive comparison of two networks under attack.
         Shared controls for Strategy and Fraction.
         """
+        if self.is_ci:
+            print(f"NetworkVisualizer: CI environment detected. Generating static comparison maps for {name1} and {name2}.")
+            from IPython.display import display
+            display(self.plot_map(G1, title=f"{name1} (Static CI Fallback)"))
+            display(self.plot_map(G2, title=f"{name2} (Static CI Fallback)"))
+            return None
+
         # --- Helper to Setup Data for a Graph ---
         def setup_graph_data(G):
             geojson_pos = {}
