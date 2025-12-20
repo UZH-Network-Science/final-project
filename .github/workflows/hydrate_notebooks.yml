@@ -54,16 +54,21 @@ jobs:
             jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 "$notebook"
           done
 
-      - name: Commit and Push changes
+      - name: Publish Verification Results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Explicitly add only the notebooks we processed
+          # Add the executed notebooks
           for notebook in $NOTEBOOKS_LIST; do
-            echo "Adding $notebook to git stage..."
             git add "$notebook"
           done
           
-          # Only commit if there are changes
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Hydrate notebooks with outputs [skip ci]" && git push)
+          # Commit the changes (if any)
+          # We use a specific message indicating this is a generated build
+          git diff --quiet && git diff --staged --quiet || git commit -m "Build: Hydrate notebooks [skip ci]"
+          
+          # Force push to the 'rendered' branch.
+          # HEAD:rendered tells git to push the current commit to the remote 'rendered' branch.
+          # -f overwrites it, ensuring it always matches the latest build.
+          git push -f origin HEAD:rendered
