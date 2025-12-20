@@ -64,7 +64,7 @@ jobs:
           
           # Commit the changes (if any)
           # We use a specific message indicating this is a generated build
-          git diff --quiet && git diff --staged --quiet || git commit -m "Build: Hydrate notebooks [skip ci]"
+          git diff --quiet && git diff --staged --quiet || git commit --no-verify -m "Build: Hydrate notebooks [skip ci]"
           
           # Force push to the 'rendered' branch.
           # HEAD:rendered tells git to push the current commit to the remote 'rendered' branch.
