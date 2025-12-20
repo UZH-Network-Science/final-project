@@ -16,6 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: true
+      # Define the list of notebooks to process here (space-separated)
+      NOTEBOOKS_LIST: >-
+        Japan_Analysis.ipynb
+        Switzerland_Analysis.ipynb
+        Comparison_Analysis.ipynb
+        Graph_Construction_Walkthrough/Japan_Construction_Story.ipynb
+        Graph_Construction_Walkthrough/Switzerland_Construction_Story.ipynb
     permissions:
       contents: write
       
@@ -28,7 +35,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.14.1'
 
       - name: Install dependencies
         run: |
@@ -37,30 +44,26 @@ jobs:
           pip install jupyter nbconvert ipykernel
           python -m ipykernel install --user --name venv_final_project
 
-      - name: Execute Japan Analysis
+      - name: Execute Notebooks
         run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Japan_Analysis.ipynb
-
-      - name: Execute Switzerland Analysis
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Switzerland_Analysis.ipynb
-
-      - name: Execute Comparison Analysis
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Comparison_Analysis.ipynb
-
-      - name: Execute Japan Construction Story
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Japan_Construction_Story.ipynb
-
-      - name: Execute Switzerland Construction Story
-        run: |
-          jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 Graph_Construction_Walkthrough/Switzerland_Construction_Story.ipynb
+          # Convert space-separated string to array for iteration
+          for notebook in $NOTEBOOKS_LIST; do
+            echo "----------------------------------------------------------------"
+            echo "Executing $notebook..."
+            echo "----------------------------------------------------------------"
+            jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=python3 "$notebook"
+          done
 
       - name: Commit and Push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add *.ipynb
+          
+          # Explicitly add only the notebooks we processed
+          for notebook in $NOTEBOOKS_LIST; do
+            echo "Adding $notebook to git stage..."
+            git add "$notebook"
+          done
+          
           # Only commit if there are changes
           git diff --quiet && git diff --staged --quiet || (git commit -m "Hydrate notebooks with outputs [skip ci]" && git push)
