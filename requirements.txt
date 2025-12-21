@@ -15,6 +15,10 @@ geopandas>=0.14.0
 # Network analysis
 networkx>=3.1
 
+# Mkdocs
+mkdocs>=1.6.1
+mkdocs-material>=9.7.1
+
 # Visualization
 matplotlib>=3.7.0
 folium>=0.15.0
