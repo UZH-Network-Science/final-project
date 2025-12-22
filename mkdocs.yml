@@ -5,6 +5,8 @@ nav:
   - Home: index.md
   - Analysis:
     - Comparison: analysis/Comparison_Analysis.ipynb
+    - Japan: analysis/Japan_Analysis.ipynb
+    - Switzerland: analysis/Switzerland_Analysis.ipynb
   - Preprocessing:
     - Japan: preprocessing/Japan_Construction_Story.ipynb
     - Switzerland: preprocessing/Switzerland_Construction_Story.ipynb
