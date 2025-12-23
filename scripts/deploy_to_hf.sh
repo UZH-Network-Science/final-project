@@ -36,6 +36,15 @@ echo "" > .gitattributes
 # 3. Stage files
 # We must clear the index to remove any existing LFS pointers from the orphan branch state
 git rm -r --cached . > /dev/null 2>&1 || true
+
+# Strip notebooks before adding (avoids pre-commit hook failure)
+if command -v nbstripout &> /dev/null; then
+    echo "Stripping output from notebooks..."
+    find . -type f -name "*.ipynb" -not -path '*/.*' -exec nbstripout {} +
+else
+    echo "Warning: nbstripout not found. Notebooks might contain outputs."
+fi
+
 git add .
 
 # 4. Commit
