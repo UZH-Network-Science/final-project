@@ -28,8 +28,8 @@ echo "" >> .gitignore
 echo "# HF Space Excludes" >> .gitignore
 echo "datasets/" >> .gitignore
 
-# Disable LFS
-echo "" > .gitattributes
+# Disable LFS for everything by default, then enable for binary files (gpickle), otw. rejected by huggingface
+echo "*.gpickle filter=lfs diff=lfs merge=lfs -text" > .gitattributes
 
 # 3. Stage files
 # Clear index
