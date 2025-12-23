@@ -365,10 +365,10 @@ class NetworkVisualizer:
             plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             plt.show()
-            return
+            plt.close()
+            return None
 
         # Prepare data first
-        plot_data = []
         plot_data = []
         # Extended palette for many lines (Tab20-like + others)
         colors = [
@@ -565,6 +565,7 @@ class NetworkVisualizer:
                 plt.grid(True, axis='y', linestyle='--', alpha=0.3)
                 plt.tight_layout()
                 plt.show()
+                plt.close()
 
         # Wire events
         for cb in checkboxes.values():
@@ -640,12 +641,13 @@ class NetworkVisualizer:
         menu = Accordion(children=[controls_content, settings_content])
         menu.set_title(0, 'Plot Controls')
         menu.set_title(1, 'Graph Settings')
-        menu.selected_index = 0 # Expand Plot Controls by default
+        menu.selected_index = None  # Start collapsed to reduce initial render overhead
         
-        display(menu, out)
-        
-        # Trigger initial plot
+        # Trigger initial plot before returning
         update_plot()
+        
+        # Return composed widget
+        return VBox([HTML(f"<h3 style='margin: 10px 0;'>{title}</h3>"), menu, out])
 
     def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
         return self.plot_metric_decay(results_dict, title, ylabel)
@@ -771,6 +773,7 @@ class NetworkVisualizer:
         plt.grid(True, which="both", ls="--", alpha=0.3)
         plt.tight_layout()
         plt.show()
+        plt.close()
 
     def compare_interactive_maps(self, G1, G2, name1="Network 1", name2="Network 2"):
         """

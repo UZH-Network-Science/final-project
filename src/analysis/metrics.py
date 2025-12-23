@@ -7,8 +7,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from functools import partial
 
-print("DEBUG: LOADING SRC.ANALYSIS.METRICS MODULE", flush=True)
-
 from abc import ABC, abstractmethod
 from src.analysis.strategies import (
     AttackStrategy, RandomStrategy, StaticTargetedStrategy,

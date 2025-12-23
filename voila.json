@@ -1,0 +1,12 @@
+{
+    "VoilaConfiguration": {
+        "strip_sources": true,
+        "progressive_rendering": true
+    },
+    "VoilaExecutor": {
+        "timeout": 600
+    },
+    "MappingKernelManager": {
+        "cull_idle_timeout": 600
+    }
+}

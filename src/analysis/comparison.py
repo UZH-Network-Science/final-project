@@ -71,7 +71,6 @@ def plot_metric_all_strategies(results_cache, viz, countries, metric_name, prett
     """
     Aggregates all strategies for all countries into a single plot for a given metric.
     """
-    print(f"\n--- Robustness: {pretty_name} ---")
     plot_data = {}
     
     # Strategies to look for
@@ -106,13 +105,15 @@ def plot_metric_all_strategies(results_cache, viz, countries, metric_name, prett
                              plot_data[label] = series
 
     if plot_data:
-        viz.plot_metric_decay(plot_data, title=f"Robustness: {pretty_name} Degradation", ylabel=pretty_name, log_x=True)
+        return viz.plot_metric_decay(plot_data, title=f"Robustness: {pretty_name} Degradation", ylabel=pretty_name, log_x=True)
     else:
         print(f"No data available for {pretty_name}")
+        return None
 
 def plot_all_metrics_consolidated(results_cache, viz, countries):
     """
     Plots simplified consolidated plots for all available metrics.
+    Returns a VBox containing all metric widgets.
     """
     metrics = [
         ('efficiency', 'Global Efficiency'),
@@ -123,8 +124,13 @@ def plot_all_metrics_consolidated(results_cache, viz, countries):
         ('avg_path_length', 'Avg Path Length')
     ]
     
+    widgets = []
     for metric_id, metric_pretty in metrics:
-        plot_metric_all_strategies(results_cache, viz, countries, metric_id, metric_pretty)
+        widget = plot_metric_all_strategies(results_cache, viz, countries, metric_id, metric_pretty)
+        if widget:
+            widgets.append(widget)
+    
+    return VBox(widgets) if widgets else None
 
 def plot_lcc_comparison(*args, **kwargs):
     """
