@@ -418,63 +418,6 @@ class NetworkVisualizer:
                 plt.figure(figsize=(15, 6))
                 
                 has_plot = False
-                for item in plot_data:
-                    if checkboxes[item['label']].value:
-                        x = np.array(item['x'])
-                        y = np.array(item['y'])
-                        
-                        # Split zero and non-zero
-                        # Assuming sorted, 0.0 is at index 0 if present
-                        if len(x) > 0 and x[0] <= 1e-9:
-                            # Plot zero point separately (scatter, no line)
-                            plt.plot(
-                                [x[0]], [y[0]], 
-                                marker=item['marker'], 
-                                linestyle='None', 
-                                label=item['label'], # Label only one to avoid dup in legend
-                                color=item['color'], 
-                                alpha=0.8,
-                                clip_on=False  # Allow point on axis to be fully visible
-                            )
-                            # Plot rest as line
-                            if len(x) > 1:
-                                plt.plot(
-                                    x[1:], y[1:], 
-                                    marker=item['marker'], 
-                                    linestyle=item['linestyle'], 
-                                    label='_nolegend_', 
-                                    color=item['color'], 
-                                    alpha=0.8
-                                )
-                        else:
-                            # Standard plot
-                            plt.plot(
-                                x, y, 
-                                marker=item['marker'], 
-                                linestyle='-', 
-                                label=item['label'], 
-                                color=item['color'], 
-                                alpha=0.8
-                            )
-                        has_plot = True
-                
-                if has_plot:
-                    # Create custom legend handle for the Start Point
-                    from matplotlib.lines import Line2D
-                    
-                    # Get existing handles/labels
-                    handles, labels = plt.gca().get_legend_handles_labels()
-                    
-                    # Add Initial State handle
-                    start_handle = Line2D([], [], color='gray', marker='H', linestyle='None', 
-                                          markersize=8, label='Initial State')
-                    handles.append(start_handle)
-                    labels.append('Initial State')
-                    
-                    plt.legend(handles=handles, labels=labels)
-                    
-                # Manual Grid Lines for every point (x-axis)
-                all_fractions = set()
                 first_nonzero = None
                 
                 for item in plot_data:
@@ -484,8 +427,7 @@ class NetworkVisualizer:
                         
                         # Split zero and non-zero
                         if len(x) > 0 and x[0] <= 1e-9:
-                            # Plot zero point separately (Always scatter)
-                            # User requested Hexagon for the start point
+                            # Plot zero point separately (Always scatter with Hexagon)
                             plt.plot(
                                 [x[0]], [y[0]], 
                                 marker='H',  # Force Hexagon
@@ -532,6 +474,22 @@ class NetworkVisualizer:
                                 alpha=0.8
                             )
                         has_plot = True
+                
+                if has_plot:
+                    # Create custom legend handle for the Start Point
+                    from matplotlib.lines import Line2D
+                    
+                    # Get existing handles/labels
+                    handles, labels = plt.gca().get_legend_handles_labels()
+                    
+                    # Add Initial State handle
+                    start_handle = Line2D([], [], color='gray', marker='H', linestyle='None', 
+                                          markersize=8, label='Initial State')
+                    handles.append(start_handle)
+                    labels.append('Initial State')
+                    
+                    plt.legend(handles=handles, labels=labels)
+                
                 if log_x:
                     plt.xlabel("Fraction of Nodes Removed (Log Scale)")
                     # Use symlog to handle 0.0 correctly
