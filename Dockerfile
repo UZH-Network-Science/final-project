@@ -3,7 +3,7 @@
 # docker build -t network-analysis .
 # docker run -it -p 7860:7860 network-analysis
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Create a non-root user
 RUN useradd -m -u 1000 user

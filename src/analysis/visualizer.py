@@ -599,11 +599,11 @@ class NetworkVisualizer:
         menu = Accordion(children=[controls_content, settings_content])
         menu.set_title(0, 'Plot Controls')
         menu.set_title(1, 'Graph Settings')
-        menu.selected_index = None  # Start collapsed to reduce initial render overhead
+        menu.selected_index = 0
         
         # Trigger initial plot before returning
         update_plot()
-        
+
         # Return composed widget
         return VBox([HTML(f"<h3 style='margin: 10px 0;'>{title}</h3>"), menu, out])
 

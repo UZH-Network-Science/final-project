@@ -124,7 +124,7 @@ class NetworkAnalyzer:
         print("Calculating global metrics...")
         
         metrics = {
-            "num_nodes": self.G.number_of_nodes(),
+            "num_nodes": self.n_original,
             "num_edges": self.G.number_of_edges(),
             "lcc_nodes": self.n_lcc,
             "lcc_edges": self.G_lcc.number_of_edges(),
