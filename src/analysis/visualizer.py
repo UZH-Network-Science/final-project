@@ -7,8 +7,9 @@ import numpy as np
 from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl
 from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink, Output, Accordion
 from IPython.display import display, clear_output
-
 import os
+
+from src.analysis.centrality_cache import get_cache
 
 class NetworkVisualizer:
     def __init__(self):
@@ -102,20 +103,12 @@ class NetworkVisualizer:
         center_lat = sum(lats) / len(lats)
         center_lon = sum(lons) / len(lons)
 
-        # Pre-calculate centralities
-        print("Calculating centralities for interactive map...")
-        # Note: For large graphs like Japan (20k), Betweenness is slow. 
-        # We handle this by checking graph size or caching if possible.
-        degree_cent = nx.degree_centrality(G)
-        articulation_points = set(nx.articulation_points(G))
-        
-        # Removed limit per user request - Always show nodes
-        # Use degree as proxy for betweenness if too large, but still allow interaction
-        if len(G) > 5000:
-            print("Graph is large (>5k nodes). using degree as proxy for betweenness for initial load speed.")
-            betweenness_cent = degree_cent 
-        else:
-            betweenness_cent = nx.betweenness_centrality(G)
+        # Pre-calculate centralities (using cache for expensive operations)
+        print("Loading centralities for interactive map...")
+        cache = get_cache()
+        degree_cent = cache.get_degree_centrality(G)
+        betweenness_cent = cache.get_betweenness_centrality(G)
+        articulation_points = cache.get_articulation_points(G)
 
         sorted_degree = sorted(degree_cent, key=degree_cent.get, reverse=True)
         sorted_betweenness = sorted(betweenness_cent, key=betweenness_cent.get, reverse=True)
@@ -759,19 +752,14 @@ class NetworkVisualizer:
 
             center = (sum(lats)/len(lats), sum(lons)/len(lons))
             
-            # Pre-calc strategies
-            d_cent = nx.degree_centrality(G)
+            # Pre-calc strategies (using cache for expensive operations)
+            cache = get_cache()
+            d_cent = cache.get_degree_centrality(G)
+            b_cent = cache.get_betweenness_centrality(G)
             
-            # Fast approx for betweenness if large
-            if len(G) > 5000:
-                b_cent = d_cent # Fallback
-            else:
-                b_cent = nx.betweenness_centrality(G)
-            
-            # Pre-calc Articulation Points (used for Articulation Strategy)
-            # Note: This can be slow for very massive graphs, but usually O(N+E)
+            # Pre-calc Articulation Points (using cache)
             try:
-                articulation_points = set(nx.articulation_points(G))
+                articulation_points = cache.get_articulation_points(G)
                 # Sort articulation points by degree centrality (descending)
                 ap_list = sorted([n for n in articulation_points], key=d_cent.get, reverse=True)
                 # Add other nodes, also sorted by degree, after articulation points
