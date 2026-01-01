@@ -46,6 +46,7 @@ class NetworkVisualizer:
             # Aspect ratio 'equal' to look like a map
             plt.gca().set_aspect('equal')
             plt.show()
+            plt.close()
             return None # Return None as we displayed the plot
 
         center = [sum(lats)/len(lats), sum(lons)/len(lons)]
