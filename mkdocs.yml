@@ -13,6 +13,5 @@ nav:
 plugins:
   - mkdocs-jupyter:
       include_source: true
-      execute: true
       allow_errors: false
       ignore_h1_titles: true
