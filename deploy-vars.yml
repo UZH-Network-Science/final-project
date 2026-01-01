@@ -1,0 +1,11 @@
+app_name: network-science
+app_namespace: network-science
+app_folder: apps/network-science/
+app_domains:
+  - network-science.obermaier.dev
+container_image: "{{ lookup('ansible.builtin.env', 'CONTAINER_IMAGE') }}"
+container_port: 7860
+registry:
+  host: ghcr.io
+  username: oberpierre
+  password: "{{ lookup('ansible.builtin.env', 'REGISTRY_PASSWORD') }}"
