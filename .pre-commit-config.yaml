@@ -5,4 +5,4 @@ repos:
       - id: nbstripout
         args:
           - --extra-keys
-          - "metadata.kernelspec metadata.language_info.version"
+          - "metadata.kernelspec metadata.language_info.version metadata.papermill cell.metadata.papermill"
