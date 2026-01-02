@@ -1,4 +1,4 @@
-# Rail Network Resilience
+# Rail Network Resilience &middot; [![Deploy](https://github.com/UZH-Network-Science/final-project/actions/workflows/pages.yml/badge.svg)](https://github.com/UZH-Network-Science/final-project/actions/workflows/pages.yml)
 
 **Resilience and Efficiency in National Rail Networks: A Comparative Network Analysis of Japan and Switzerland**
 
