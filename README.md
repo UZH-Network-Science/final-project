@@ -1,12 +1,3 @@
----
-title: Japanese vs Swiss Network Resilience Analysis
-emoji: 🚄
-colorFrom: blue
-colorTo: gray
-sdk: docker
-pinned: false
-app_port: 7860
----
 # Rail Network Resilience
 
 **Resilience and Efficiency in National Rail Networks: A Comparative Network Analysis of Japan and Switzerland**
