@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 import networkx as nx
 import numpy as np
+from src.analysis.centrality_cache import get_cache
 
 class AttackStrategy(ABC):
     @abstractmethod
@@ -27,30 +28,25 @@ class StaticTargetedStrategy(AttackStrategy):
         return self.ranked_nodes[:num_to_remove]
 
 class DegreeStrategy(StaticTargetedStrategy):
-    def __init__(self, G, inverse=False):
-        print(f"Calculating Degree Centrality (Inverse={inverse})...")
-        centrality = nx.degree_centrality(G)
-        ranked_nodes = sorted(centrality, key=centrality.get, reverse=not inverse)
+    def __init__(self, G, inverse=False, force_recompute=False):
+        print(f"Loading Degree Centrality (Inverse={inverse})...")
+        cache = get_cache()
+        ranked_nodes = cache.get_sorted_node_ids(G, 'degree', inverse=inverse, 
+                                                  force_recompute=force_recompute)
         super().__init__(ranked_nodes)
 
 class BetweennessStrategy(StaticTargetedStrategy):
-    def __init__(self, G, inverse=False):
-        print(f"Calculating Betweenness Centrality (Inverse={inverse})...")
-        centrality = nx.betweenness_centrality(G)
-        ranked_nodes = sorted(centrality, key=centrality.get, reverse=not inverse)
+    def __init__(self, G, inverse=False, force_recompute=False):
+        print(f"Loading Betweenness Centrality (Inverse={inverse})...")
+        cache = get_cache()
+        ranked_nodes = cache.get_sorted_node_ids(G, 'betweenness', inverse=inverse,
+                                                  force_recompute=force_recompute)
         super().__init__(ranked_nodes)
 
 class ArticulationPointStrategy(StaticTargetedStrategy):
-    def __init__(self, G):
-        print("Identifying Articulation Points strategy...")
-        # Hybrid Strategy: Articulation Points first (sorted by degree), then High Degree
-        articulation_points = set(nx.articulation_points(G))
-        degree_cent = nx.degree_centrality(G)
-        
-        # Sort Articulation Points by Degree
-        ap_list = sorted([n for n in articulation_points], key=degree_cent.get, reverse=True)
-        
-        # Sort Non-Articulation Points by Degree
-        others = sorted([n for n in degree_cent if n not in articulation_points], key=degree_cent.get, reverse=True)
-        
-        super().__init__(ap_list + others)
+    def __init__(self, G, force_recompute=False):
+        print("Loading Articulation Points strategy...")
+        cache = get_cache()
+        ranked_nodes = cache.get_sorted_node_ids(G, 'articulation', inverse=False,
+                                                  force_recompute=force_recompute)
+        super().__init__(ranked_nodes)

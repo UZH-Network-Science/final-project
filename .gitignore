@@ -5,3 +5,6 @@ cache/
 *.pyc
 __pycache__/
 .ipynb_checkpoints/
+
+# Mkdocs
+site/

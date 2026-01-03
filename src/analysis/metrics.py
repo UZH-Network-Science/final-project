@@ -7,8 +7,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from functools import partial
 
-print("DEBUG: LOADING SRC.ANALYSIS.METRICS MODULE", flush=True)
-
 from abc import ABC, abstractmethod
 from src.analysis.strategies import (
     AttackStrategy, RandomStrategy, StaticTargetedStrategy,
@@ -126,7 +124,7 @@ class NetworkAnalyzer:
         print("Calculating global metrics...")
         
         metrics = {
-            "num_nodes": self.G.number_of_nodes(),
+            "num_nodes": self.n_original,
             "num_edges": self.G.number_of_edges(),
             "lcc_nodes": self.n_lcc,
             "lcc_edges": self.G_lcc.number_of_edges(),

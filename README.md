@@ -1,9 +1,17 @@
-
-# Rail Network Resilience
+# Rail Network Resilience &middot; [![Deploy](https://github.com/UZH-Network-Science/final-project/actions/workflows/pages.yml/badge.svg)](https://github.com/UZH-Network-Science/final-project/actions/workflows/pages.yml)
 
 **Resilience and Efficiency in National Rail Networks: A Comparative Network Analysis of Japan and Switzerland**
 
 A network science project analyzing the structural properties, resilience, and efficiency of national railway networks. This repository contains data processing pipelines, graph construction notebooks, and visualization tools for both the Japanese and Swiss rail systems.
+
+## Results
+
+Explore our complete analysis and findings:
+
+| Resource | Description |
+|----------|-------------|
+| [Documentation](https://uzh-network-science.github.io/final-project/) | Full analysis notebooks with visualizations |
+| [Interactive Comparison](https://network-science.obermaier.dev) | Live robustness exploration (Comparison notebook) |
 
 ## Datasets
 

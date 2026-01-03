@@ -158,6 +158,7 @@ def plot_connected_components(G, title="Connected Components"):
     ax.set_title(f"{title}\n({len(components)} components, Largest: {len(components[0])/len(G)*100:.1f}%)")
     ax.axis('off')
     plt.show()
+    plt.close()
 
 def create_component_map(G):
     """
@@ -356,3 +357,4 @@ def create_static_map(G, title="Static Network Map"):
     plt.axis('off')
     plt.gca().set_aspect('equal')
     plt.show()
+    plt.close()
