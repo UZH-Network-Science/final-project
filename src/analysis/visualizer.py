@@ -5,11 +5,13 @@ import json
 import networkx as nx
 import numpy as np
 from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl
-from ipywidgets import FloatSlider, Dropdown, VBox, HBox, HTML, Checkbox, Layout, Button, jslink, Output, Accordion
-from IPython.display import display, clear_output
+from ipywidgets import FloatSlider, Dropdown, VBox, HBox, Checkbox, Layout, Button, jslink, Output, Accordion
+from ipywidgets import HTML as WidgetHTML
+from IPython.display import display, clear_output, HTML
 import os
 
 from src.analysis.centrality_cache import get_cache
+from src.analysis.top_n_widget import TopNDisplayController, build_comparison_static_matrix
 
 class NetworkVisualizer:
     def __init__(self):
@@ -85,7 +87,24 @@ class NetworkVisualizer:
         """
         if self.is_ci:
             print("NetworkVisualizer: CI environment detected. Generating static map for GitHub compatibility.")
-            return self.plot_map(G, title="Initial State (CI Fallback)")
+            static_map = self.plot_map(G, title="Initial State (CI Fallback)")
+            
+            # Also show static centrality matrix
+            cache = get_cache()
+            degree_cent = cache.get_degree_centrality(G)
+            betweenness_cent = cache.get_betweenness_centrality(G)
+            articulation_points = cache.get_articulation_points(G)
+            
+            sorted_degree = sorted(degree_cent, key=degree_cent.get, reverse=True)
+            sorted_betweenness = sorted(betweenness_cent, key=betweenness_cent.get, reverse=True)
+            ap_list = sorted([n for n in articulation_points], key=degree_cent.get, reverse=True)
+            others = sorted([n for n in degree_cent if n not in articulation_points], key=degree_cent.get, reverse=True)
+            sorted_articulation = ap_list + others
+            
+            controller = TopNDisplayController(G, "Network", sorted_degree, sorted_betweenness, sorted_articulation)
+            display(HTML(controller.build_static_matrix_html()))
+            
+            return static_map
 
         # Pre-process coordinates for speed
         geojson_pos = {}
@@ -159,11 +178,11 @@ class NetworkVisualizer:
         check_nodes_red = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
         check_nodes_rem = Checkbox(value=True, indent=False, layout=Layout(width='30px')) # New
 
-        label_edges_blue = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
-        label_edges_red = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
-        label_nodes_blue = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
-        label_nodes_red = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
-        label_nodes_rem = HTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
+        label_edges_blue = WidgetHTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
+        label_edges_red = WidgetHTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
+        label_nodes_blue = WidgetHTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
+        label_nodes_red = WidgetHTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
+        label_nodes_rem = WidgetHTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
 
         # Native Visibility Linking (Faster/Smoother than Python updates)
         jslink((check_edges_blue, 'value'), (layer_edges_blue, 'visible'))
@@ -179,7 +198,7 @@ class NetworkVisualizer:
         row_5 = HBox([check_nodes_rem, label_nodes_rem], layout=Layout(align_items='center'))
 
         layer_control_box = VBox([
-            HTML(value="<b>Network Legend</b>"),
+            WidgetHTML(value="<b>Network Legend</b>"),
             row_1, row_2, row_3, row_4, row_5
         ])
         
@@ -289,9 +308,29 @@ class NetworkVisualizer:
         # Initial draw
         update_layers()
         
+        # --- Top-N Important Stations Widget ---
+        top_n_controller = TopNDisplayController(
+            G, "Network", sorted_degree, sorted_betweenness, sorted_articulation
+        )
+        top_n_widget = top_n_controller.build_interactive_widget()
+        
+        def update_top_n(change=None):
+            """Update Top-N display when strategy or fraction changes."""
+            strategy = strat_dd.value
+            num_remove = int(len(G) * frac_sl.value)
+            top_n_controller.update(strategy, num_remove)
+        
+        strat_dd.observe(update_top_n, names='value')
+        frac_sl.observe(update_top_n, names='value')
+        
+        # Initial Top-N update
+        update_top_n()
+        
+        # Display Layout
         slider_row = HBox([frac_sl, btn_minus, btn_plus])
         display(VBox([strat_dd, slider_row]))
         display(m)
+        display(top_n_widget)
 
     def plot_metric_decay(self, results_dict, title="Metric Decay", ylabel="Value", log_x=True):
         """
@@ -579,15 +618,15 @@ class NetworkVisualizer:
                 row_content = grouped_by_strategy[strategy]
                 rows.append(HBox(row_content, layout=Layout(margin='5px 0')))
             
-            controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
+            controls_content = VBox([WidgetHTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
         else:
             # Fallback: Arrange checkboxes in rows of 3
             cb_list = list(checkboxes.values())
             rows = [HBox(cb_list[i:i+3]) for i in range(0, len(cb_list), 3)]
-            controls_content = VBox([HTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
+            controls_content = VBox([WidgetHTML(f"<b>{ylabel} - Show/Hide Lines:</b>")] + rows)
         
         # Graph Settings Menu
-        settings_content = VBox([HTML("<b>Visual Options:</b>"), connect_chk])
+        settings_content = VBox([WidgetHTML("<b>Visual Options:</b>"), connect_chk])
         
         # Wrap in Accordion to create a hidden menu
         menu = Accordion(children=[controls_content, settings_content])
@@ -599,7 +638,7 @@ class NetworkVisualizer:
         update_plot()
 
         # Return composed widget
-        return VBox([HTML(f"<h3 style='margin: 10px 0;'>{title}</h3>"), menu, out])
+        return VBox([WidgetHTML(f"<h3 style='margin: 10px 0;'>{title}</h3>"), menu, out])
 
     def plot_efficiency_decay(self, results_dict, title="Network Efficiency Decay", ylabel="Global Efficiency"):
         return self.plot_metric_decay(results_dict, title, ylabel)
@@ -737,6 +776,35 @@ class NetworkVisualizer:
             from IPython.display import display
             display(self.plot_map(G1, title=f"{name1} (Static CI Fallback)"))
             display(self.plot_map(G2, title=f"{name2} (Static CI Fallback)"))
+            
+            # Show static comparison matrix
+            cache = get_cache()
+            
+            # Network 1 centralities
+            deg1 = cache.get_degree_centrality(G1)
+            bet1 = cache.get_betweenness_centrality(G1)
+            ap1 = cache.get_articulation_points(G1)
+            sorted_deg1 = sorted(deg1, key=deg1.get, reverse=True)
+            sorted_bet1 = sorted(bet1, key=bet1.get, reverse=True)
+            ap_list1 = sorted([n for n in ap1], key=deg1.get, reverse=True)
+            others1 = sorted([n for n in deg1 if n not in ap1], key=deg1.get, reverse=True)
+            sorted_art1 = ap_list1 + others1
+            
+            # Network 2 centralities
+            deg2 = cache.get_degree_centrality(G2)
+            bet2 = cache.get_betweenness_centrality(G2)
+            ap2 = cache.get_articulation_points(G2)
+            sorted_deg2 = sorted(deg2, key=deg2.get, reverse=True)
+            sorted_bet2 = sorted(bet2, key=bet2.get, reverse=True)
+            ap_list2 = sorted([n for n in ap2], key=deg2.get, reverse=True)
+            others2 = sorted([n for n in deg2 if n not in ap2], key=deg2.get, reverse=True)
+            sorted_art2 = ap_list2 + others2
+            
+            ctrl1 = TopNDisplayController(G1, name1, sorted_deg1, sorted_bet1, sorted_art1)
+            ctrl2 = TopNDisplayController(G2, name2, sorted_deg2, sorted_bet2, sorted_art2)
+            
+            display(HTML(build_comparison_static_matrix([ctrl1, ctrl2])))
+            
             return None
 
         # --- Helper to Setup Data for a Graph ---
@@ -1001,11 +1069,11 @@ class NetworkVisualizer:
         chk_nodes_rem = Checkbox(value=True, indent=False, layout=Layout(width='30px'))
 
         # Labels with Icons
-        lbl_edges_core = HTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
-        lbl_edges_iso = HTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
-        lbl_nodes_core = HTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
-        lbl_nodes_iso = HTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
-        lbl_nodes_rem = HTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
+        lbl_edges_core = WidgetHTML(f"{legend_icon('blue', 'line')} <b>Core Edges</b>")
+        lbl_edges_iso = WidgetHTML(f"{legend_icon('red', 'line')} <b>Isolated Edges</b>")
+        lbl_nodes_core = WidgetHTML(f"{legend_icon('blue', 'circle')} <b>Core Nodes</b>")
+        lbl_nodes_iso = WidgetHTML(f"{legend_icon('red', 'circle')} <b>Isolated Nodes</b>")
+        lbl_nodes_rem = WidgetHTML(f"{legend_icon('#999999', 'circle')} <b>Removed Nodes</b>")
 
         # Link to Layers (Both Maps)
         # layers1 = [l_edges_core, l_edges_iso, l_nodes_core, l_nodes_iso, l_nodes_removed]
@@ -1033,7 +1101,7 @@ class NetworkVisualizer:
         ]
         
         legend_box = VBox([
-            HTML("<b>Network Legend</b>"),
+            WidgetHTML("<b>Network Legend</b>"),
             *legend_rows
         ], layout=Layout(
             background='white', 
@@ -1046,45 +1114,34 @@ class NetworkVisualizer:
         m2.add_control(WidgetControl(widget=legend_box, position='topright'))
 
         # Required for update logic compatibility
-        # The update_both function references show_removed_chk and show_nodes_chk values.
-        # We need to ensure it doesn't break. 
-        # But wait, we are removing those specific checkboxes.
-        # We must update update_both to simply assume we want to update coordinates regardless of visibility,
-        # OR aliases them.
-        # However, layer visibility is now handled by jslink directly on the layer objects!
-        # So update_both just needs to update the *data* in the layers.
-        # BUT update_both (lines 796+) checks `show_removed` and `show_nodes` to optionally send empty data [].
-        # If we remove the Python-side filtering in update_both and rely on JS visibility, it is cleaner/faster.
-        # Strategy: Define dummy variables for update_both to check (always True) OR redefine update_both.
-        # Since update_both is already defined above, we can't easily redefine it here without replacing that block too.
-        # Hack fix: Define proxies that always return True?
-        # Better: Since layers have .visible prop controlled by us now, we can just feed data always.
-        # But `update_both` logic explicitly sets empty features if show=False. We need to override this behavior.
-        # Actually, `update_both` reads from `show_removed_chk.value`.
-        # We can alias `show_removed_chk` to `chk_nodes_rem` (so it follows user input)
-        # And `show_nodes_chk` to `chk_nodes_core` (assuming if core is on, we calculate positions).
-        # Or better, just make mock objects or aliases.
-        
         show_removed_chk = chk_nodes_rem
-        # For 'show_nodes', we have split controls (Core/Iso). 
-        # If either is on, we probably want to compute data.
-        # Let's just point show_nodes_chk to a dummy object with value=True so update_both always sends data,
-        # and we let the Layer.visible property handle the actual hiding.
         class DummyCheck:
             value = True
         show_nodes_chk = DummyCheck() 
-        # Update: Actually if update_both sends empty data, the layer is empty regardless of visibility.
-        # If we always send data, JS visibility toggles it. This is preferred.
-        # So setting show_nodes_chk.value = True always is the correct move for JS-controlled visibility.
         
+        # --- Top-N Important Stations Widget (Using Controller) ---
+        top_n_controller1 = TopNDisplayController(G1, name1, deg1, bet1, art1)
+        top_n_controller2 = TopNDisplayController(G2, name2, deg2, bet2, art2)
+        
+        top_n_widget1 = top_n_controller1.build_interactive_widget()
+        top_n_widget2 = top_n_controller2.build_interactive_widget()
+        
+        def update_top_n(change=None):
+            """Update Top-N displays based on current strategy and fraction."""
+            strategy = strat_dd.value
+            num_remove1 = int(len(G1) * frac_sl.value)
+            num_remove2 = int(len(G2) * frac_sl.value)
+            top_n_controller1.update(strategy, num_remove1)
+            top_n_controller2.update(strategy, num_remove2)
+        
+        strat_dd.observe(update_top_n, names='value')
+        frac_sl.observe(update_top_n, names='value')
         strat_dd.observe(update_both, names='value')
         frac_sl.observe(update_both, names='value')
-        # We don't need to observe visibility toggles for data updates anymore if we always send data.
-        # But removed nodes calculation involves re-filtering. 
-        # If we always calculate, it's fine.
         
-        # Initial call
+        # Initial calls
         update_both()
+        update_top_n()
         
         # Main Layout
         # Row 1: Strategy
@@ -1097,12 +1154,19 @@ class NetworkVisualizer:
         
         controls = VBox([row1, row2], layout=Layout(width='100%', padding='10px'))
         
-        label1 = HTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name1}</div>")
-        label2 = HTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name2}</div>")
+        label1 = WidgetHTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name1}</div>")
+        label2 = WidgetHTML(f"<div style='text-align:center; font-weight:bold; font-size:16px;'>{name2}</div>")
         
         map_box = HBox([
             VBox([label1, m1], layout=Layout(width='50%', padding='5px')),
             VBox([label2, m2], layout=Layout(width='50%', padding='5px'))
         ])
         
-        return VBox([controls, map_box])
+        # Top-N stations display (side by side with controllers)
+        top_n_box = HBox([
+            VBox([top_n_widget1], layout=Layout(width='50%')),
+            VBox([top_n_widget2], layout=Layout(width='50%'))
+        ], layout=Layout(width='100%', margin='10px 0'))
+        
+        return VBox([controls, map_box, top_n_box])
+
