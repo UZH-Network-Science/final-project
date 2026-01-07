@@ -724,7 +724,7 @@ class NetworkVisualizer:
         m.add_layer(layer_nodes_iso)
 
         # 6. Legend
-        html_legend = HTML('''
+        html_legend = WidgetHTML(value='''
             <div style="background:white; padding:5px; border:1px solid #ccc; border-radius:5px;">
                 <b>Components</b><br>
                 <i style="background:blue; width:10px; height:10px; display:inline-block; border-radius:50%;"></i> Largest<br>
