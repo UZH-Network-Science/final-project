@@ -147,7 +147,7 @@ def merge_interchange_stations(station_groups):
             
     return station_groups, coord_to_station
 
-def build_graph(station_groups, coord_to_station, gdf_railroads):
+def build_graph(station_groups, coord_to_station, gdf_railroads, spatial_snapping = True):
     """Builds the final graph linking stations and railroads."""
     print("Step 4: Building NetworkX graph...")
     G = nx.Graph()
@@ -168,7 +168,6 @@ def build_graph(station_groups, coord_to_station, gdf_railroads):
         for coord in data['coords']:
             all_station_coords.append(coord)
             coord_to_station_list.append(station_id)
-
     station_tree = cKDTree(np.array(all_station_coords))
     SNAP_THRESHOLD_DEG = 2e-6  # ~20cm
 
@@ -183,7 +182,7 @@ def build_graph(station_groups, coord_to_station, gdf_railroads):
             if infra_tree is None or len(infra_coords_list) > len(infra_tree.data):
                 infra_tree = cKDTree(np.array(infra_coords_list))
             dist, idx = infra_tree.query(coord)
-            if dist <= SNAP_THRESHOLD_DEG:
+            if spatial_snapping and dist <= SNAP_THRESHOLD_DEG:
                 return list(infra_nodes.values())[idx]
         
         infra_node_id = f"INFRA_{infra_node_counter}"
@@ -205,7 +204,7 @@ def build_graph(station_groups, coord_to_station, gdf_railroads):
             if coord in coord_to_station:
                 return coord_to_station[coord]
             dist, idx = station_tree.query(coord)
-            if dist <= SNAP_THRESHOLD_DEG:
+            if spatial_snapping and dist <= SNAP_THRESHOLD_DEG:
                 return coord_to_station_list[idx]
             return get_or_create_infra_node(coord)
         
