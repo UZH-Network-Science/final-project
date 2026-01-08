@@ -90,18 +90,18 @@ def plot_metric_all_strategies(results_cache, viz, countries, metric_name, prett
                 label = f"{country.title()} - {strat_label}"
                 plot_data[label] = series
             else:
-                 # Try old keys if extended ones fail (backwards compatibility for Efficiency)
-                 if metric_name == 'efficiency':
-                     legacy_map = {
-                         'Random': 'efficiency_decay_random',
-                         'Targeted Degree': 'efficiency_decay_degree',
-                         'Targeted Betweenness': 'efficiency_decay_betweenness'
-                     }
-                     if strat_label in legacy_map:
-                         series = get_metric_series(results_cache, country, legacy_map[strat_label], sub_metric='efficiency')
-                         if series:
-                             label = f"{country.title()} - {strat_label}"
-                             plot_data[label] = series
+                # Try old keys if extended ones fail (backwards compatibility for Efficiency)
+                if metric_name == 'efficiency':
+                    legacy_map = {
+                        'Random': 'efficiency_decay_random',
+                        'Targeted Degree': 'efficiency_decay_degree',
+                        'Targeted Betweenness': 'efficiency_decay_betweenness'
+                    }
+                    if strat_label in legacy_map:
+                        series = get_metric_series(results_cache, country, legacy_map[strat_label], sub_metric='efficiency')
+                        if series:
+                            label = f"{country.title()} - {strat_label}"
+                            plot_data[label] = series
 
     if plot_data:
         return viz.plot_metric_decay(plot_data, title=f"Robustness: {pretty_name} Degradation", ylabel=pretty_name, log_x=True)
