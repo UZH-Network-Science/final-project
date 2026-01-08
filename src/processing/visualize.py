@@ -1,5 +1,4 @@
 import folium
-import random
 import networkx as nx
 import math
 import matplotlib.pyplot as plt
@@ -334,7 +333,7 @@ def create_robustness_style_map(G, title="Rail Network (Core vs Isolated)"):
     folium.LayerControl().add_to(m)
     return m
 
-def create_static_map(G, title="Static Network Map"):
+def plot_static_map(G, title="Static Network Map", node_color='#1f77b4', edge_color='#6c757d'):
     """
     Creates a static Matplotlib map for CI/GitHub rendering.
     Uses 'lon'/'lat' node attributes for positioning.
@@ -348,10 +347,10 @@ def create_static_map(G, title="Static Network Map"):
         return
 
     # Draw Edges
-    nx.draw_networkx_edges(G, pos, width=0.5, edge_color='#6c757d', alpha=0.5)
+    nx.draw_networkx_edges(G, pos, width=0.5, edge_color=edge_color, alpha=0.5)
     
     # Draw Nodes
-    nx.draw_networkx_nodes(G, pos, node_size=10, node_color='#1f77b4', alpha=0.8)
+    nx.draw_networkx_nodes(G, pos, node_size=10, node_color=node_color, alpha=0.8)
     
     plt.title(title)
     plt.axis('off')

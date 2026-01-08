@@ -145,7 +145,6 @@ def build_graph(net_nodes, net_segments, station_abbreviation_set):
 def process_switzerland(base_dir="datasets/switzerland", output_dir="datasets/switzerland"):
     base_dir = Path(base_dir)
     output_dir = Path(output_dir)
-    GRAPH_OUTPUT_PATH = output_dir / "swiss_rail_network_swisstopo.gpickle"
     
     print(f"Processing Switzerland dataset from: {base_dir}")
     

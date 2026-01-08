@@ -1,7 +1,5 @@
 import json
-import os
 from pathlib import Path
-import hashlib
 
 class ResultsManager:
     def __init__(self, metrics_dir="metrics"):
@@ -16,7 +14,7 @@ class ResultsManager:
         if path.exists():
             with open(path, 'r') as f:
                 return json.load(f)
-        return {}
+        return None
 
     def save_results(self, country_name, results):
         path = self._get_path(country_name)
