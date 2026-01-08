@@ -1,7 +1,5 @@
 import json
-import os
 from pathlib import Path
-import hashlib
 
 class ResultsManager:
     def __init__(self, metrics_dir="metrics"):

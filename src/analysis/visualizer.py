@@ -1,7 +1,4 @@
-import folium
 import matplotlib.pyplot as plt
-import pandas as pd
-import json
 import networkx as nx
 import numpy as np
 from ipyleaflet import Map, basemaps, GeoJSON, WidgetControl

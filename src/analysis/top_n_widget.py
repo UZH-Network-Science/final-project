@@ -161,8 +161,6 @@ class TopNDisplayController:
             name = self.get_node_name(node)
             rows.append(f"<tr><td style='padding: 4px; width: 40px;'>{rank}</td><td style='padding: 4px;'>{name}</td></tr>")
         
-        has_more = end_idx < len(sorted_list)
-        
         # Conditional subheader for offset
         offset_indicator = ""
         if self.current_offset > 0:

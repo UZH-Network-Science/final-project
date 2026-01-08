@@ -1,5 +1,4 @@
 import folium
-import random
 import networkx as nx
 import math
 import matplotlib.pyplot as plt

@@ -16,7 +16,6 @@ def get_metric_series(results_cache, country, key_suffix, sub_metric='efficiency
     full_data = results_cache[country]
     
     # Check if key exists directly
-    is_extended = False
     if key_suffix not in full_data:
         # Fallback: if requesting LCC but passing old efficiency key, try swapping to extended
         # Or if passed a key like 'extended_metrics_random', it might just be there
