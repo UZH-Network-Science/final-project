@@ -12,72 +12,13 @@ import os
 
 from src.analysis.centrality_cache import get_cache
 from src.analysis.top_n_widget import TopNDisplayController, build_comparison_static_matrix
+from src.processing.visualize import plot_static_map
 
 class NetworkVisualizer:
     def __init__(self):
         self.is_ci = os.environ.get('CI', 'false').lower() == 'true' or os.environ.get('GITHUB_ACTIONS', 'false').lower() == 'true'
         if self.is_ci:
             print("NetworkVisualizer: CI environment detected. Interactive plots will be skipped to prevent build failures.")
-
-    def plot_map(self, G, node_color='#1f77b4', edge_color='#6c757d', title="Network Map"):
-        """
-        Generates a static Folium map.
-        """
-
-
-        lats = [d['lat'] for n, d in G.nodes(data=True) if 'lat' in d]
-        lons = [d['lon'] for n, d in G.nodes(data=True) if 'lon' in d]
-        
-        if not lats:
-            return folium.Map()
-
-        if self.is_ci:
-            # Matplotlib Fallback for CI (Guaranteed GitHub Rendering)
-            print(f"Generating static Matplotlib map for: {title}")
-            plt.figure(figsize=(10, 10))
-            
-            # Extract positions
-            pos = {n: (d['lon'], d['lat']) for n, d in G.nodes(data=True) if 'lon' in d and 'lat' in d}
-            
-            # Draw
-            nx.draw_networkx_edges(G, pos, width=0.5, edge_color=edge_color, alpha=0.5)
-            nx.draw_networkx_nodes(G, pos, node_size=10, node_color=node_color, alpha=0.8)
-            
-            plt.title(title)
-            plt.axis('off') # Hide axes for cleaner look
-            # Aspect ratio 'equal' to look like a map
-            plt.gca().set_aspect('equal')
-            plt.show()
-            plt.close()
-            return None # Return None as we displayed the plot
-
-        center = [sum(lats)/len(lats), sum(lons)/len(lons)]
-        m = folium.Map(location=center, zoom_start=8, tiles='CartoDB Positron')
-        
-        # Edges
-        edges_fg = folium.FeatureGroup(name="Edges")
-        for u, v in G.edges():
-            if 'lat' in G.nodes[u] and 'lat' in G.nodes[v]:
-                p1 = (G.nodes[u]['lat'], G.nodes[u]['lon'])
-                p2 = (G.nodes[v]['lat'], G.nodes[v]['lon'])
-                folium.PolyLine([p1, p2], color=edge_color, weight=1, opacity=0.5).add_to(edges_fg)
-        edges_fg.add_to(m)
-        
-        # Nodes 
-        nodes_fg = folium.FeatureGroup(name="Nodes")
-        for n, d in G.nodes(data=True):
-             if 'lat' in d:
-                folium.CircleMarker(
-                    location=[d['lat'], d['lon']],
-                    radius=2,
-                    color=node_color,
-                    fill=True,
-                    popup=str(n)
-                ).add_to(nodes_fg)
-        nodes_fg.add_to(m)
-        
-        folium.LayerControl().add_to(m)
-        return m
 
     def create_interactive_map_ui(self, G):
         """
@@ -87,7 +28,7 @@ class NetworkVisualizer:
         """
         if self.is_ci:
             print("NetworkVisualizer: CI environment detected. Generating static map for GitHub compatibility.")
-            static_map = self.plot_map(G, title="Initial State (CI Fallback)")
+            plot_static_map(G, title="Initial State (CI Fallback)")
             
             # Also show static centrality matrix
             cache = get_cache()
@@ -104,7 +45,7 @@ class NetworkVisualizer:
             controller = TopNDisplayController(G, "Network", sorted_degree, sorted_betweenness, sorted_articulation)
             display(HTML(controller.build_static_matrix_html()))
             
-            return static_map
+            return None
 
         # Pre-process coordinates for speed
         geojson_pos = {}
@@ -650,7 +591,8 @@ class NetworkVisualizer:
         """
         if self.is_ci:
             print("NetworkVisualizer: CI environment detected. Generating static component map for GitHub compatibility.")
-            return self.plot_map(G, title="Connected Components (Static CI Fallback)")
+            plot_static_map(G, title="Connected Components (Static CI Fallback)")
+            return None
 
         # Pre-process coordinates
         geojson_pos = {}
@@ -774,8 +716,8 @@ class NetworkVisualizer:
         if self.is_ci:
             print(f"NetworkVisualizer: CI environment detected. Generating static comparison maps for {name1} and {name2}.")
             from IPython.display import display
-            display(self.plot_map(G1, title=f"{name1} (Static CI Fallback)"))
-            display(self.plot_map(G2, title=f"{name2} (Static CI Fallback)"))
+            display(plot_static_map(G1, title=f"{name1} (Static CI Fallback)"))
+            display(plot_static_map(G2, title=f"{name2} (Static CI Fallback)"))
             
             # Show static comparison matrix
             cache = get_cache()
