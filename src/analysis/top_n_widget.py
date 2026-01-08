@@ -35,6 +35,7 @@ class TopNDisplayController:
         self.G = G
         self.name = name
         self.sorted_lists = {
+            'Random': [], # Ensures load more button is not shown
             'Degree Centrality': sorted_degree,
             'Betweenness Centrality': sorted_betweenness,
             'Articulation Priority': sorted_articulation
@@ -51,7 +52,7 @@ class TopNDisplayController:
     def get_node_name(self, node_id):
         """Get human-readable name for a node, falling back to node_id."""
         data = self.G.nodes.get(node_id, {})
-        for attr in ['name', 'station_name', 'label', 'title']:
+        for attr in ['name', 'label']:
             if attr in data:
                 return str(data[attr])
         return str(node_id)
@@ -59,6 +60,7 @@ class TopNDisplayController:
     def _get_sorted_list_for_strategy(self, strategy):
         """Map strategy name to the appropriate sorted list."""
         strategy_map = {
+            'Random': 'Random',
             'Targeted (Degree)': 'Degree Centrality',
             'Targeted (Betweenness)': 'Betweenness Centrality',
             'Targeted (Articulation)': 'Articulation Priority',
