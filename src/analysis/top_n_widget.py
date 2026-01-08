@@ -7,8 +7,9 @@ Provides both interactive (Jupyter/Voila) and static (CI) rendering modes with:
 - "Load More" button to expand the displayed list
 """
 
-from ipywidgets import VBox, HBox, HTML, Button, Layout
-from IPython.display import display
+from ipywidgets import VBox, HBox, Button, Layout
+from ipywidgets import HTML as WidgetHTML
+from IPython.display import display, HTML
 
 
 class TopNDisplayController:
@@ -50,7 +51,7 @@ class TopNDisplayController:
     def get_node_name(self, node_id):
         """Get human-readable name for a node, falling back to node_id."""
         data = self.G.nodes.get(node_id, {})
-        for attr in ['label', 'name']:
+        for attr in ['name', 'station_name', 'label', 'title']:
             if attr in data:
                 return str(data[attr])
         return str(node_id)
@@ -162,10 +163,15 @@ class TopNDisplayController:
         
         has_more = end_idx < len(sorted_list)
         
+        # Conditional subheader for offset
+        offset_indicator = ""
+        if self.current_offset > 0:
+            offset_indicator = f"<span style='color: #888; font-size: 11px;'>(top {self.current_offset} stations removed)</span>"
+        
         return f"""
-        <div style='margin: 5px;'>
-            <h4 style='margin-bottom: 5px;'>{self.name} - Top by {metric_name}</h4>
-            <div style='max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;'>
+        <div>
+            <div style='display: flex; align-items: center; gap: 8px;'><h4 style='margin: 8px 0'>{self.name} - Top by {metric_name}</h4> {offset_indicator}</div>
+            <div style='max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;'>
                 <table style='width: 100%; border-collapse: collapse; font-size: 12px;'>
                     <thead style='position: sticky; top: 0; background: #f5f5f5;'>
                         <tr>
@@ -207,7 +213,7 @@ class TopNDisplayController:
         Returns:
             VBox: Widget containing HTML table and Load More button
         """
-        self._html_widget = HTML(value=self._render_table_html())
+        self._html_widget = WidgetHTML(value=self._render_table_html())
         
         self._load_more_btn = Button(
             description='Load More',
