@@ -373,7 +373,7 @@ class NetworkVisualizer:
             })
             
         # Create Widgets
-        out = Output(layout=Layout(width='100%'))
+        out = Output(layout=Layout(width='99%'))
         checkboxes = {}
         for item in plot_data:
             checkboxes[item['label']] = Checkbox(
@@ -828,8 +828,8 @@ class NetworkVisualizer:
         
         m1.layout.height = '600px'
         m2.layout.height = '600px'
-        m1.layout.width = '100%'
-        m2.layout.width = '100%'
+        m1.layout.width = '99%'
+        m2.layout.width = '99%'
 
         # Create Layers
         layers1 = create_layers(m1, 'blue', 'red')
